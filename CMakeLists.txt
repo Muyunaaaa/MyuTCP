@@ -5,11 +5,11 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 
 set(CMAKE_CXX_STANDARD 23)
 
-#set(SFML_SKIP_INSTALL ON CACHE BOOL "" FORCE)
+set(SFML_SKIP_INSTALL ON CACHE BOOL "" FORCE)
 
 add_subdirectory(vendors/libuv)
 add_subdirectory(vendors/spdlog)
-
+add_subdirectory(vendors/raylib)
 #add_subdirectory(vendors/sfml)
 
 add_executable(tcp_realization src/main.cpp
@@ -19,6 +19,7 @@ add_executable(tcp_realization src/main.cpp
         include/network/UdpDriver.h
         include/network/TimerManager.h
         src/network/TimerManager.cpp
+        src/network/UdpDriver.cpp
 )
 
 target_include_directories(tcp_realization PRIVATE
@@ -31,6 +32,5 @@ target_link_libraries(tcp_realization PRIVATE
         uv_a
         spdlog
 #        SFML::Graphics
-#        SFML::Window
-#        SFML::System
+        raylib
 )
