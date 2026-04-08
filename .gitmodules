@@ -1,0 +1,9 @@
+[submodule "vendors/sfml"]
+	path = vendors/sfml
+	url = https://github.com/SFML/SFML.git
+[submodule "vendors/libuv"]
+	path = vendors/libuv
+	url = https://github.com/libuv/libuv.git
+[submodule "vendors/spdlog"]
+	path = vendors/spdlog
+	url = https://github.com/gabime/spdlog.git
