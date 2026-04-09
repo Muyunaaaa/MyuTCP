@@ -20,6 +20,8 @@ add_executable(tcp_realization src/main.cpp
         include/network/TimerManager.h
         src/network/TimerManager.cpp
         src/network/UdpDriver.cpp
+        include/core/RingBuffer.h
+        src/core/tcb.cpp
 )
 
 target_include_directories(tcp_realization PRIVATE
