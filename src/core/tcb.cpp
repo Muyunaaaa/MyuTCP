@@ -356,18 +356,97 @@ void myu::TcpSession::_handle_try_send() {
 }
 
 void myu::TcpSession::_calculate_checksum(myu::myu_tcp_packet &packet) {
+    // according to RFC1071,set checksum field to 0 before calculating checksum
+    packet.header.checksum = 0;
+    // even though the checksum field is 16 bits, we use a 32-bit integer to store the sum to avoid overflow
+    uint32_t sum = 0;
+
+    // the core logic
+    auto add_to_sum = [&sum](const void* data, size_t len) {
+        const uint16_t* ptr = static_cast<const uint16_t*>(data);
+        while (len > 1) {
+            sum += *ptr++;
+            len -= 2;
+        }
+        if (len > 0) {
+            sum += *reinterpret_cast<const uint8_t*>(ptr);
+        }
+    };
+
+    add_to_sum(&packet.header, sizeof(packet.header));
+
+    if (!packet.payload.empty()) {
+        add_to_sum(packet.payload.data(), packet.payload.size());
+    }
+
+    // fold the sum to 16 bits and take the one's complement
+    while (sum >> 16) {
+        sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+
+    packet.header.checksum = static_cast<uint16_t>(~sum);
 }
 
 bool myu::TcpSession::_verify_checksum(const myu::myu_tcp_packet &packet) {
+    uint32_t sum = 0;
 
+    auto add_to_sum = [&](const void* data, size_t len) {
+        const uint16_t* ptr = static_cast<const uint16_t*>(data);
+        while (len > 1) {
+            sum += *ptr++;
+            len -= 2;
+        }
+        if (len > 0) {
+            sum += *(static_cast<const uint8_t*>(static_cast<const void*>(ptr)));
+        }
+    };
+
+    add_to_sum(&packet.header, sizeof(packet.header));
+
+    if (!packet.payload.empty()) {
+        add_to_sum(packet.payload.data(), packet.payload.size());
+    }
+
+
+    while (sum >> 16) {
+        sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+    return static_cast<uint16_t>(~sum) == 0;
 }
 
 size_t myu::TcpSession::send(std::span<const uint8_t> data) {
+    if (data.empty()) {return 0;}
 
+    size_t buffer_free_space = send_buffer_.capacity() - send_buffer_.size();
+    size_t to_write = std::min(data.size(), buffer_free_space);
+
+    if (buffer_free_space < data.size()) {
+        spdlog::warn("buffer free space is too small, only {} bytes can be written, but the data size is {}", buffer_free_space, data.size());
+    }
+
+    bool success = send_buffer_.push_batch(data.subspan(0, to_write));
+
+    if (!success) {return 0;}
+
+    _handle_try_send();
+
+    return to_write;
 }
 
 size_t myu::TcpSession::recv(std::span<uint8_t> buf) {
+    if (buf.empty() | recv_buffer_.empty()) {return 0;}
+    size_t to_read = std::min(buf.size(), recv_buffer_.size());
 
+    if (to_read < buf.size()) {
+        spdlog::warn("the buffer size is larger than the available data size, only {} bytes can be read, but the buffer size is {}", to_read, buf.size());
+    }
+
+    for (size_t i = 0; i < to_read; ++i) {
+        buf[i] = recv_buffer_.front();
+        recv_buffer_.pop_front(1);
+    }
+
+    return to_read;
 }
 
 void myu::TcpSession::handle_syn_sent(const myu::myu_tcp_packet &packet) {
