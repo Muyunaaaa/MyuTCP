@@ -22,6 +22,7 @@ add_executable(tcp_realization src/main.cpp
         src/network/UdpDriver.cpp
         include/core/RingBuffer.h
         src/core/tcb.cpp
+        include/core/stack.h
 )
 
 target_include_directories(tcp_realization PRIVATE

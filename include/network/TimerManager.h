@@ -10,7 +10,6 @@ public:
     explicit TimerManager(uv_loop_t* loop) : loop_(loop) {}
 
     TimerManager(const TimerManager&) = delete;
-    TimerManager& operator=(const TimerManager&) = delete;
 
     ~TimerManager();
 

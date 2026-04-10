@@ -37,6 +37,7 @@ namespace myu {
         TimerManager& timer_manager_;
         UdpDriver& udp_driver_;
 
+
         // !!! to be sure that all timers are stopped when the session is closed
         // otherwise the timer callback function may be called after the session is closed, which may cause undefined behavior
         void _transition_to(TcpState new_state);
@@ -79,13 +80,13 @@ namespace myu {
         // lifetime control
         void connect(const char* host, uint16_t port); // three handshake
         void close(); // four handshake
-        bool is_connected();
-        bool is_closed();
+        bool is_connected() const;
+        bool is_closed() const;
 
         // data transmission
         size_t send(std::span<const uint8_t> data);
         size_t recv(std::span<uint8_t> buf);
-        size_t available(); // return the size of data that can be read from recv_buffer_
+        size_t available() const; // return the size of data that can be read from recv_buffer_
 
         // callbacks
         void set_on_established(std::function<void()> callback) {on_established_cb_ = std::move(callback);}
@@ -94,7 +95,7 @@ namespace myu {
         void set_on_error(std::function<void(const std::string&)> callback) {on_error_cb_ = std::move(callback);}
 
         // state utils
-        TcpState get_state();
+        TcpState get_state() const;
         std::pair<std::string, uint16_t> get_local_addr();
         std::pair<std::string, uint16_t> get_remote_addr();
         uint32_t get_peer_window_size();
