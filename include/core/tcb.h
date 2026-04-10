@@ -37,6 +37,10 @@ namespace myu {
         TimerManager& timer_manager_;
         UdpDriver& udp_driver_;
 
+        const char* listener_ip_;
+        uint16_t listener_port_;
+        const char* remote_ip_;
+        uint16_t remote_port_;
 
         // !!! to be sure that all timers are stopped when the session is closed
         // otherwise the timer callback function may be called after the session is closed, which may cause undefined behavior

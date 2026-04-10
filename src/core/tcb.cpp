@@ -22,6 +22,12 @@ myu::TcpSession::TcpSession(TimerManager &timer_manager, UdpDriver &udp_driver)
     send_buffer_ = myu::RingQueue<uint8_t, 1024>();
     recv_buffer_ = myu::RingQueue<uint8_t, 1024>();
     ooo_map_ = std::map<uint32_t, myu::myu_tcp_packet>();
+
+    // default listener and remote address, it can be changed by the user
+    listener_ip_ = "0.0.0.0";
+    listener_port_ = 9999;
+    remote_ip_ = "127.0.0.1";
+    remote_port_ = 9999;
 }
 
 bool myu::TcpSession::is_closed() const{
