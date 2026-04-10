@@ -40,7 +40,7 @@ namespace myu {
 
     struct myu_tcp_packet {
         myu_tcp_header header;
-        std::vector<std::byte> options;
-        std::vector<std::byte> payload;
+        std::vector<uint8_t> options;
+        std::vector<uint8_t> payload;
     };
 }

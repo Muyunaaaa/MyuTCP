@@ -21,6 +21,19 @@ namespace myu {
             advance();
         }
 
+        bool push_batch(std::span<const T> values) {
+            if (values.size() > (Capacity - size_)) {
+                return false; // Not enough space to push all values
+            }
+
+            for (const auto& value : values) {
+                buffer_[head_] = value;
+                head_ = (head_ + 1) % Capacity;
+            }
+            size_ += values.size();
+            return true;
+        }
+
         // when the buffer is full, try_push will return false, otherwise it will push the value and return true
         bool try_push(const T& value) {
             if (full()) return false;

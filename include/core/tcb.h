@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include <span>
 #include <string>
 
@@ -40,6 +41,18 @@ namespace myu {
         }
     }
 
+    enum TcpFlag : uint8_t {
+        // TcpFlag : uint8_t code
+        FLAG_FIN = 0x01, // 0000 0001
+        FLAG_SYN = 0x02, // 0000 0010
+        FLAG_RST = 0x04, // 0000 0100
+        FLAG_PSH = 0x08, // 0000 1000
+        FLAG_ACK = 0x10, // 0001 0000
+        FLAG_URG = 0x20, // 0010 0000
+        FLAG_ECE = 0x40, // 0100 0000
+        FLAG_CWR = 0x80  // 1000 0000
+    };
+
     class TcpSession {
     private:
         TcpState state_ = TcpState::CLOSED;
@@ -49,7 +62,7 @@ namespace myu {
 
         myu::RingQueue<uint8_t, 1024> send_buffer_;
         myu::RingQueue<uint8_t, 1024> recv_buffer_;
-        std::map<uint32_t, myu::myu_tcp_packet> ooo_map_; // out-of-order packet map, key is the seq number
+        std::map<uint32_t, std::vector<uint8_t>> ooo_map_; // out-of-order packet map, key is the seq number
 
         TimerManager& timer_manager_;
         UdpDriver& udp_driver_;
@@ -59,7 +72,9 @@ namespace myu {
         const char* remote_ip_;
         uint16_t remote_port_;
 
+
         uint32_t peer_usable_window_size_; // save the usable window size of peer, which is updated when receive packet, and used to calculate the usable window size for sending
+        uint64_t timeout_ms_ = 2000; // default timeout for retransmission, it can be adjusted according to the network condition
 
         // !!! to be sure that all timers are stopped when the session is closed
         // otherwise the timer callback function may be called after the session is closed, which may cause undefined behavior
@@ -91,11 +106,27 @@ namespace myu {
         // 2. retransmit the packet using udp_driver_
         // 3. restart the timer using timer_manager_, may double the timeout for next time
         // if there too mant times to retransmit, we can consider the connection is broken and close it
-        bool _handle_retransmit(const myu::myu_tcp_packet& packet);
+        bool _handle_retransmit(std::shared_ptr<myu_tcp_packet> packet, uint32_t retransmit_count = 0, uint32_t retr_seq_num = 0, uint64_t next_timeout_ms = 2000);
 
         // when the state is ESTABLISHED and user use send function, we try to send the data in send_buffer_
         // if the sending window is not full, otherwise we just put the data in send_buffer_ and wait for the window to be available
         void _handle_try_send();
+
+        // ip-port utils
+        void set_listener_addr(const char* ip, uint16_t port){
+            listener_ip_ = ip;
+            listener_port_ = port;
+        }
+        void set_remote_addr(const char* ip, uint16_t port){
+            remote_ip_ = ip;
+            remote_port_ = port;
+        }
+        void _set_peer_usable_window_size(uint32_t size){
+            peer_usable_window_size_ = size;
+        }
+        void _set_timeout_ms(uint32_t timeout_ms) {
+            timeout_ms_ = timeout_ms;
+        }
 
     public:
         TcpSession(TimerManager& timer_manager, UdpDriver& udp_driver);
@@ -134,7 +165,7 @@ namespace myu {
             return send_window_.get_usable_window_size();
         }
         uint32_t get_usable_recv_window_size() const {
-            return send_window_.get_usable_window_size();
+            return recv_window_.get_usable_window_size();
         }
 
         // handle packet
@@ -142,5 +173,17 @@ namespace myu {
         void handle_syn_sent(const myu::myu_tcp_packet& packet); // only handle SYN-ACK packet
         void handle_established(const myu::myu_tcp_packet& packet); // only handle ACK and data packet
         void handle_close_wait(const myu::myu_tcp_packet& packet); // only handle ACK and FIN packet
+
+        // other
+        void _calculate_checksum(myu::myu_tcp_packet& packet);
+        uint64_t get_timeout_ms() const {return timeout_ms_;}
+
+        // ip-port utils
+        std::string get_listener_ip() const{return listener_ip_;}
+        uint16_t get_listener_port() const{return listener_port_;}
+        std::string get_remote_ip() const{return remote_ip_;}
+        uint16_t get_remote_port() const{return remote_port_;}
+
+        constexpr static uint32_t MAX_RETRANSMIT_COUNT = 5;
     };
 }
