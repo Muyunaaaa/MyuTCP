@@ -7,6 +7,8 @@ struct TimerManager {
 private:
     uv_loop_t *loop_;
     std::map<uint32_t, uv_timer_t *> timers_;
+    // todo: we need to resolve zero window problem
+    // uv_timer_t* persist_timer;
 
 public:
     explicit TimerManager(uv_loop_t *loop) : loop_(loop) {

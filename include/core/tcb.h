@@ -176,6 +176,7 @@ namespace myu {
 
         // other
         void _calculate_checksum(myu::myu_tcp_packet& packet);
+        bool _verify_checksum(const myu::myu_tcp_packet& packet);
         uint64_t get_timeout_ms() const {return timeout_ms_;}
 
         // ip-port utils

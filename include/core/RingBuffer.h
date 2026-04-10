@@ -2,6 +2,7 @@
 #include <array>
 #include <cstddef>
 #include <utility>
+#include <vector>
 
 namespace myu {
     template <typename T, size_t Capacity>
@@ -41,6 +42,20 @@ namespace myu {
             head_ = (head_ + 1) % Capacity;
             ++size_;
             return true;
+        }
+
+        std::vector<T> peek_range(size_t offset, size_t n) const {
+            if (offset >= size_ || n == 0) return {};
+
+            size_t actual_n = ((offset + n) > size_) ? (size_ - offset) : n;
+
+            std::vector<T> result;
+            result.reserve(actual_n);
+
+            for (size_t i = 0; i < actual_n; ++i) {
+                result.push_back((*this)[offset + i]);
+            }
+            return result;
         }
 
         void pop_front(size_t n) {
