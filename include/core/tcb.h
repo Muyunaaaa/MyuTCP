@@ -23,6 +23,23 @@ namespace myu {
         TIME_WAIT
     };
 
+    inline std::string state_to_string(TcpState state) {
+        switch (state) {
+            case TcpState::CLOSED: return "CLOSED";
+            case TcpState::LISTEN: return "LISTEN";
+            case TcpState::SYN_SENT: return "SYN_SENT";
+            case TcpState::SYN_RECEIVED: return "SYN_RECEIVED";
+            case TcpState::ESTABLISHED: return "ESTABLISHED";
+            case TcpState::FIN_WAIT_1: return "FIN_WAIT_1";
+            case TcpState::FIN_WAIT_2: return "FIN_WAIT_2";
+            case TcpState::CLOSE_WAIT: return "CLOSE_WAIT";
+            case TcpState::CLOSING: return "CLOSING";
+            case TcpState::LAST_ACK: return "LAST_ACK";
+            case TcpState::TIME_WAIT: return "TIME_WAIT";
+            default: return "UNKNOWN_STATE";
+        }
+    }
+
     class TcpSession {
     private:
         TcpState state_ = TcpState::CLOSED;
@@ -41,6 +58,8 @@ namespace myu {
         uint16_t listener_port_;
         const char* remote_ip_;
         uint16_t remote_port_;
+
+        uint32_t peer_usable_window_size_; // save the usable window size of peer, which is updated when receive packet, and used to calculate the usable window size for sending
 
         // !!! to be sure that all timers are stopped when the session is closed
         // otherwise the timer callback function may be called after the session is closed, which may cause undefined behavior
@@ -62,12 +81,12 @@ namespace myu {
         // otherwise put in ooo_map and return false
         bool _handle_incoming_packet(const myu::myu_tcp_packet& packet);
 
-        // parse the ack_number in the header
+        // parse the ack_number in the header, check the ack number is valid, if valid, update send_window_ and stop the timer, then return true
         bool _handle_ack(const myu::myu_tcp_packet& packet);
 
         // as a callback function for timer, it will be called when the timer is timeout
         // then it will retransmit the packet and restart the timer
-        // what this function will do?
+        // what will this function do?
         // 1. get the packet from send_buffer_ according to the seq number
         // 2. retransmit the packet using udp_driver_
         // 3. restart the timer using timer_manager_, may double the timeout for next time
@@ -76,7 +95,7 @@ namespace myu {
 
         // when the state is ESTABLISHED and user use send function, we try to send the data in send_buffer_
         // if the sending window is not full, otherwise we just put the data in send_buffer_ and wait for the window to be available
-        void _try_send();
+        void _handle_try_send();
 
     public:
         TcpSession(TimerManager& timer_manager, UdpDriver& udp_driver);
@@ -93,17 +112,30 @@ namespace myu {
         size_t available() const; // return the size of data that can be read from recv_buffer_
 
         // callbacks
-        void set_on_established(std::function<void()> callback) {on_established_cb_ = std::move(callback);}
-        void set_on_data(std::function<void(size_t)> callback) {on_data_cb_ = std::move(callback);}
-        void set_on_closed(std::function<void()> callback) {on_closed_cb_ = std::move(callback);}
-        void set_on_error(std::function<void(const std::string&)> callback) {on_error_cb_ = std::move(callback);}
+        void set_on_established(std::function<void()> callback);
+        void set_on_data(std::function<void(size_t)> callback);
+        void set_on_closed(std::function<void()> callback);
+        void set_on_error(std::function<void(const std::string&)> callback);
 
         // state utils
         TcpState get_state() const;
-        std::pair<std::string, uint16_t> get_local_addr();
-        std::pair<std::string, uint16_t> get_remote_addr();
-        uint32_t get_peer_window_size();
-        uint32_t get_window_size();
+        std::pair<std::string, uint16_t> get_listen_addr() const;
+        std::pair<std::string, uint16_t> get_remote_addr() const;
+        uint32_t get_peer_usable_recv_window_size() const{
+            return peer_usable_window_size_;
+        }
+        uint32_t get_send_window_size() const{
+            return send_window_.send_window_size_;
+        }
+        uint32_t get_recv_window_size() const{
+            return recv_window_.recv_window_size_;
+        }
+        uint32_t get_usable_send_window_size() const {
+            return send_window_.get_usable_window_size();
+        }
+        uint32_t get_usable_recv_window_size() const {
+            return send_window_.get_usable_window_size();
+        }
 
         // handle packet
         void input(const myu::myu_tcp_packet& packet); // the entry function for handling incoming packet

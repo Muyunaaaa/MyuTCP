@@ -27,6 +27,33 @@ void TimerManager::stop_timer(uint32_t seq_num) {
     }
 }
 
+// ack number, it means the packet to be sent, so its timer may has been started but not timeout yet
+// if seq = ack_num, we may stop the timer we should not stop, so we just stop the timer whose seq < ack_num
+void TimerManager::stop_timers_up_to(uint32_t ack_num) {
+    // because the map is ordered by key, we can use lower_bound to find the first timer whose seq is greater than or equal to ack_num
+    auto it_end = timers_.lower_bound(ack_num);
+
+    for (auto it = timers_.begin(); it != it_end;) {
+        uint32_t seq = it->first;
+        uv_timer_t *timer = it->second;
+
+        uv_timer_stop(timer);
+        uv_close(reinterpret_cast<uv_handle_t *>(timer), [](uv_handle_t *handle) {
+            auto *t = reinterpret_cast<uv_timer_t *>(handle);
+
+            if (t->data) {
+                delete static_cast<std::function<void()> *>(t->data);
+                t->data = nullptr;
+            }
+
+            delete t;
+        });
+
+        spdlog::info("stop timer whose seq = {} (ACKed by {})", seq, ack_num);
+        it = timers_.erase(it);
+    }
+}
+
 void on_timer_uv_tick(uv_timer_t *handle) {
     auto *func = static_cast<std::function<void()> *>(handle->data);
 

@@ -21,6 +21,24 @@ namespace myu {
             advance();
         }
 
+        // when the buffer is full, try_push will return false, otherwise it will push the value and return true
+        bool try_push(const T& value) {
+            if (full()) return false;
+            buffer_[head_] = value;
+            head_ = (head_ + 1) % Capacity;
+            ++size_;
+            return true;
+        }
+
+        void pop_front(size_t n) {
+            if (n == 0) return;
+
+            size_t actual_to_pop = (n > size_) ? size_ : n;
+
+            tail_ = (tail_ + actual_to_pop) % Capacity;
+            size_ -= actual_to_pop;
+        }
+
         bool pop(T& out) {
             if (size_ == 0) {
                 return false;
