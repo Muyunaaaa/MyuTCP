@@ -23,6 +23,7 @@ add_executable(tcp_realization src/main.cpp
         include/core/RingBuffer.h
         src/core/tcb.cpp
         include/core/stack.h
+        include/util/gen_iss.h
 )
 
 target_include_directories(tcp_realization PRIVATE

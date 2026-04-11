@@ -2,8 +2,6 @@
 
 #include "spdlog/spdlog.h"
 
-void stop_timer_without_erase(uint32_t seq_num) {
-}
 
 void TimerManager::stop_timer(uint32_t seq_num) {
     auto it = timers_.find(seq_num);
@@ -79,6 +77,29 @@ void TimerManager::start_timer(uint32_t seq_num, uint64_t timeout_ms, std::funct
     spdlog::info("start timer whose seq = {} ", seq_num);
 }
 
+void TimerManager::stop_all_timers() {
+    for (auto it = timers_.begin(); it != timers_.end();) {
+        uint32_t seq = it->first;
+        uv_timer_t *timer = it->second;
+
+        uv_timer_stop(timer);
+        uv_close(reinterpret_cast<uv_handle_t *>(timer), [](uv_handle_t *handle) {
+            auto *t = reinterpret_cast<uv_timer_t *>(handle);
+
+            if (t->data) {
+                delete static_cast<std::function<void()> *>(t->data);
+                t->data = nullptr;
+            }
+
+            delete t;
+        });
+
+        it = timers_.erase(it);
+    }
+    uv_timer_stop(_2msl_timer.get());
+    spdlog::debug("All timers stopped");
+}
+
 TimerManager::~TimerManager() {
     for (auto &[seq, timer]: timers_) {
         uv_timer_stop(timer);
@@ -94,3 +115,4 @@ TimerManager::~TimerManager() {
     }
     spdlog::warn("TimeManager destroyed, all timers cancelled.");
 }
+
