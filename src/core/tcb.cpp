@@ -515,8 +515,8 @@ void myu::TcpSession::input(const myu::myu_tcp_packet &packet) {
     }
 }
 
-void myu::TcpSession::connect(const char *host, uint16_t port) {
-    set_remote_addr(host, port);
+void myu::TcpSession::connect() {
+    set_remote_addr(remote_ip_, remote_port_);
 
     _transition_to(TcpState::SYN_SENT);
 

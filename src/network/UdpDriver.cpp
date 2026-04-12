@@ -2,7 +2,7 @@
 
 #include "spdlog/spdlog.h"
 
-UdpDriver::UdpDriver(uv_loop_t *loop, const char *listen_ip, int listen_port) {
+void UdpDriver::init(uv_loop_t* loop, const char* listen_ip, int listen_port) {
     uv_udp_init(loop, &udp_handle_);
     udp_handle_.data = this;
     struct sockaddr_in listen_addr;

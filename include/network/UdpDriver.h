@@ -2,13 +2,16 @@
 #include "uv.h"
 #include <functional>
 #include "segment.h"
+#include "spdlog/spdlog.h"
 
 using OnRecCallBack = std::function<void(const myu::myu_tcp_packet&, const sockaddr_in&)>;
 
 struct UdpDriver {
 public:
-    UdpDriver(uv_loop_t* loop, const char* listen_ip, int listen_port);
+    UdpDriver() = default;
     ~UdpDriver() = default;
+
+    void init(uv_loop_t* loop, const char* listen_ip, int listen_port);
 
     // set callback function when receive packet
     inline void set_on_receive(OnRecCallBack callback){on_receive_callback_ = std::move(callback);}
@@ -16,6 +19,14 @@ public:
     void send_packet(const myu::myu_tcp_packet& packet, const sockaddr_in& dest_addr);
 
     inline void set_loss_rate(float rate){loss_rate_ = rate;}
+
+    void stop() {
+        if (!uv_is_closing(reinterpret_cast<uv_handle_t*>(&udp_handle_))) {
+            uv_close(reinterpret_cast<uv_handle_t*>(&udp_handle_), [](uv_handle_t* handle) {
+                spdlog::info("UdpDriver stopped.");
+            });
+        }
+    }
 private:
     uv_udp_t udp_handle_;
     OnRecCallBack on_receive_callback_;

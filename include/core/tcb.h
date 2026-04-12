@@ -122,17 +122,6 @@ namespace myu {
 
         void _handle_2msl_timeout();
 
-        // ip-port utils
-        void set_listener_addr(const char *ip, uint16_t port) {
-            listener_ip_ = ip;
-            listener_port_ = port;
-        }
-
-        void set_remote_addr(const char *ip, uint16_t port) {
-            remote_ip_ = ip;
-            remote_port_ = port;
-        }
-
         void _set_peer_usable_window_size(uint32_t size) {
             peer_usable_window_size_ = size;
         }
@@ -141,11 +130,15 @@ namespace myu {
             timeout_ms_ = timeout_ms;
         }
 
+        // other
+        void _calculate_checksum(myu::myu_tcp_packet &packet);
+        bool _verify_checksum(const myu::myu_tcp_packet &packet);
+
     public:
         TcpSession(uv_loop_t* loop, UdpDriver &udp_driver);
 
         // lifetime control
-        void connect(const char *host, uint16_t port); // three handshake
+        void connect(); // three handshake
         void close(); // four handshake
         void listen(); // only for server, transition to LISTEN state, wait for incoming connection request
         bool is_connected() const;
@@ -212,12 +205,6 @@ namespace myu {
         // urgent
         void handle_reset(); // only handle RST packet
 
-
-        // other
-        void _calculate_checksum(myu::myu_tcp_packet &packet);
-
-        bool _verify_checksum(const myu::myu_tcp_packet &packet);
-
         uint64_t get_timeout_ms() const { return timeout_ms_; }
 
         // ip-port utils
@@ -225,6 +212,15 @@ namespace myu {
         uint16_t get_listener_port() const { return listener_port_; }
         std::string get_remote_ip() const { return remote_ip_; }
         uint16_t get_remote_port() const { return remote_port_; }
+        void set_listener_addr(const char *ip, uint16_t port) {
+            listener_ip_ = ip;
+            listener_port_ = port;
+        }
+
+        void set_remote_addr(const char *ip, uint16_t port) {
+            remote_ip_ = ip;
+            remote_port_ = port;
+        }
 
         constexpr static uint32_t MAX_RETRANSMIT_COUNT = 5;
     };
