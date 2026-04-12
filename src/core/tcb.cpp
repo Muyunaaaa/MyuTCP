@@ -417,7 +417,14 @@ bool myu::TcpSession::_verify_checksum(const myu::myu_tcp_packet &packet) {
     while (sum >> 16) {
         sum = (sum & 0xFFFF) + (sum >> 16);
     }
-    return static_cast<uint16_t>(~sum) == 0;
+
+    if (static_cast<uint16_t>(~sum) == 0) {
+        return true;
+    }else {
+        spdlog::warn("Checksum verification failed for packet with seq {}, expected checksum = {}, calculated checksum = {}",
+                     ntohl(packet.header.seq_num), ntohs(packet.header.checksum), static_cast<uint16_t>(~sum));
+        return false;
+    }
 }
 
 size_t myu::TcpSession::send(std::span<const uint8_t> data) {
@@ -519,7 +526,7 @@ void myu::TcpSession::input(const myu::myu_tcp_packet &packet) {
 }
 
 void myu::TcpSession::connect() {
-    set_remote_addr(remote_ip_, remote_port_);
+    spdlog::info("Start to connect to {}:{}", get_remote_ip(), get_remote_port());
 
     _transition_to(TcpState::SYN_SENT);
 
@@ -555,7 +562,7 @@ void myu::TcpSession::listen() {
 
 
 void myu::TcpSession::handle_syn_sent(const myu::myu_tcp_packet &packet) {
-    if (!(packet.header.syn && packet.header.ack)) {
+    if (packet.header.syn && packet.header.ack) {
         if (packet.header.ack_num != send_window_.send_unack_ + 1) return;
         recv_window_.recv_next_ = packet.header.seq_num + 1;
         send_window_.send_unack_ = packet.header.ack_num;

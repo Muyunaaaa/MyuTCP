@@ -1,14 +1,22 @@
 #include "UdpDriver.h"
 
 #include "spdlog/spdlog.h"
-
+#include "util/parse_ip.h"
 void UdpDriver::init(uv_loop_t* loop, const char* listen_ip, int listen_port) {
-    uv_udp_init(loop, &udp_handle_);
+    int r;
+    r = uv_udp_init(loop, &udp_handle_);
+    if (r < 0) spdlog::error("Init error: {}", uv_strerror(r));
+
     udp_handle_.data = this;
     struct sockaddr_in listen_addr;
     uv_ip4_addr(listen_ip, listen_port, &listen_addr);
-    uv_udp_bind(&udp_handle_, reinterpret_cast<const struct sockaddr *>(&listen_addr), UV_UDP_REUSEADDR);
-    uv_udp_recv_start(&udp_handle_, on_uv_alloc, on_uv_recv);
+
+    r = uv_udp_bind(&udp_handle_, (const struct sockaddr *)&listen_addr, UV_UDP_REUSEADDR);
+    if (r < 0) spdlog::error("Bind error: {}", uv_strerror(r));
+
+    r = uv_udp_recv_start(&udp_handle_, on_uv_alloc, on_uv_recv);
+    if (r < 0) spdlog::error("Recv start error: {}", uv_strerror(r));
+
     spdlog::info("UDP Driver started on {}:{}", listen_ip, listen_port);
 }
 
@@ -18,6 +26,7 @@ void UdpDriver::send_packet(const myu::myu_tcp_packet &packet, const sockaddr_in
         spdlog::warn("Packet seq={} LOST (Simulated)", packet.header.seq_num);
         return;
     }
+    spdlog::info("Actually sending to {}:{}", _get_ip_str(dest_addr), ntohs(dest_addr.sin_port));
     uv_buf_t buf = uv_buf_init((char*)(&packet), sizeof(myu::myu_tcp_packet));
     uv_udp_send_t *send_req = new uv_udp_send_t();
     uv_udp_send(send_req, &udp_handle_, &buf, 1, reinterpret_cast<const sockaddr *>(&dest_addr), [](uv_udp_send_t *req, int status) {

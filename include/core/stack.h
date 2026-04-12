@@ -31,7 +31,11 @@ namespace myu {
         TcpSession *create_session(std::string remote_ip, uint16_t remote_port) {
             auto new_session = std::make_unique<TcpSession>(loop_, udp_driver_);
 
-            auto key = std::make_pair(std::move(remote_ip), remote_port);
+            new_session->set_remote_addr(remote_ip.c_str(), remote_port);
+
+            spdlog::info("test: now the ip = {} and port = {}", new_session->get_remote_ip(), new_session->get_remote_port());
+
+            auto key = std::make_pair(remote_ip, remote_port);
 
             auto [it, inserted] = tcp_sessions_.try_emplace(std::move(key), std::move(new_session));
 

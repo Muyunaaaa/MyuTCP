@@ -33,6 +33,12 @@ public:
     // stop all timers
     void stop_all_timers();
 
+    // drop timer
+    void drop_timer(uint32_t seq_num);
+
+    // drop all timers
+    void drop_all_timers();
+
     std::unique_ptr<uv_timer_t> _2msl_timer;
     uv_loop_t *loop_;
 };
