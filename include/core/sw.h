@@ -2,7 +2,6 @@
 
 #include <map>
 
-#include "segment.h"
 #include "uv.h"
 
 // SlidingWindow

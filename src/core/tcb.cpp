@@ -6,7 +6,7 @@
 #include "util/gen_iss.h"
 
 myu::TcpSession::TcpSession(uv_loop_t *loop, UdpDriver &udp_driver)
-    : timer_manager_(loop), udp_driver_(udp_driver) {
+    : timer_manager_(loop), udp_driver_(udp_driver), loop_(loop) {
     state_ = TcpState::CLOSED;
     std::random_device rd;
     std::mt19937 gen(rd());

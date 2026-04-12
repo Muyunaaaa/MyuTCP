@@ -70,7 +70,7 @@ namespace myu {
         const char *remote_ip_;
         uint16_t remote_port_;
 
-        uv_loop_t* loop_;
+        uv_loop_t* loop_ = nullptr;
 
         bool user_want_to_close_ = false; // when the user call close function, we set this flag to true, and we will try to close the connection when the send buffer is empty
 
