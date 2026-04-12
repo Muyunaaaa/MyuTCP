@@ -326,16 +326,19 @@ void myu::TcpSession::_handle_try_send() {
         state_ == TcpState::FIN_WAIT_1 ||
         state_ == TcpState::FIN_WAIT_2 ||
         state_ == TcpState::CLOSED ||
-        state_ == TcpState::LAST_ACK
+        state_ == TcpState::LAST_ACK ||
+        state_ == TcpState::LISTEN ||
+        state_ == TcpState::SYN_RECEIVED ||
+        state_ == TcpState::SYN_SENT
     )
         return;
     size_t usable_window_size = get_usable_send_window_size();
     size_t usable_peer_recv_window_size = get_peer_usable_recv_window_size();
-    spdlog::debug("try to send. the local send window size = {}, the remote recv window size = {}", usable_window_size,
+    spdlog::info("try to send. the local send window size = {}, the remote recv window size = {}", usable_window_size,
                   usable_peer_recv_window_size);
     uint32_t effective_window_size = std::min(usable_window_size, usable_peer_recv_window_size);
     uint32_t inflight = send_window_.send_next_ - send_window_.send_unack_;
-    if (effective_window_size <= inflight) {
+    if (effective_window_size <= inflight && state_ == TcpState::ESTABLISHED) {
         spdlog::warn("the size of inflight data more than the effective size");
         return;
     }

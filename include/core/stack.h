@@ -43,6 +43,7 @@ namespace myu {
             std::string remote_ip;
             uint16_t remote_port;
             udp_driver_.set_on_receive([&](const myu::myu_tcp_packet &packet, const sockaddr_in &addr) {
+                spdlog::info("Received packet from {}:{}", _get_ip_str(addr), ntohs(addr.sin_port));
                 remote_ip = _get_ip_str(addr);
                 remote_port = ntohs(addr.sin_port);
 
