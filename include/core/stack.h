@@ -64,14 +64,16 @@ namespace myu {
                     if (packet.header.syn) {
                         TcpSession *new_session = create_session(remote_ip, remote_port);
                         new_session->set_remote_addr(remote_ip.c_str(), remote_port);
+                        spdlog::info("test: ready to read packet");
+                        new_session->listen();
                         new_session->input(packet);
                     } else {
                         // send rst to peer
                         sockaddr_in dest;
                         uv_ip4_addr(remote_ip.c_str(), remote_port, &dest);
-                        myu::myu_tcp_packet packet_;
-                        packet_.header.rst = 1;
-                        udp_driver_.send_packet(packet, dest);
+                        std::shared_ptr<myu::myu_tcp_packet> packet_= std::make_shared<myu::myu_tcp_packet>();
+                        packet_.get()->header.rst = 1;
+                        udp_driver_.send_packet(packet_, dest);
                     }
                 }
             });

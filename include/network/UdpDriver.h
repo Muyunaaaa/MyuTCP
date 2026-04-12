@@ -16,7 +16,7 @@ public:
     // set callback function when receive packet
     inline void set_on_receive(OnRecCallBack callback){on_receive_callback_ = std::move(callback);}
 
-    void send_packet(const myu::myu_tcp_packet& packet, const sockaddr_in& dest_addr);
+    void send_packet(std::shared_ptr<myu::myu_tcp_packet> packet, const sockaddr_in& dest_addr);
 
     inline void set_loss_rate(float rate){loss_rate_ = rate;}
 

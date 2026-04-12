@@ -203,12 +203,13 @@ void myu::TcpSession::_send_pure_ack(uint32_t ack_num) {
     packet.header.window_size = htons(static_cast<uint16_t>(get_usable_recv_window_size()));
 
     packet.payload.clear();
+    std::shared_ptr<myu_tcp_packet> packet_ptr = std::make_shared<myu_tcp_packet>(packet);
 
-    _calculate_checksum(packet);
+    _calculate_checksum(*packet_ptr);
 
     sockaddr_in dest;
     uv_ip4_addr(get_remote_ip().c_str(), get_remote_port(), &dest);
-    udp_driver_.send_packet(packet, dest);
+    udp_driver_.send_packet(packet_ptr, dest);
 
     spdlog::debug("Sent Pure ACK: ack_num = {}, window = {}", ack_num, ntohs(packet.header.window_size));
 }
@@ -252,7 +253,7 @@ void myu::TcpSession::_send_control_packet(uint8_t flags) {
     }
 
     _calculate_checksum(*packet_ptr);
-    udp_driver_.send_packet(*packet_ptr, dest);
+    udp_driver_.send_packet(packet_ptr, dest);
 }
 
 void myu::TcpSession::_send_payload_packet(const std::vector<uint8_t> &payload, uint8_t flags) {
@@ -286,7 +287,7 @@ void myu::TcpSession::_send_payload_packet(const std::vector<uint8_t> &payload, 
     send_window_.send_next_ += payload_len;
 
     _calculate_checksum(*packet_ptr);
-    udp_driver_.send_packet(*packet_ptr, dest);
+    udp_driver_.send_packet(packet_ptr, dest);
 
     spdlog::info("Sent Data: seq = {}, len = {}", ntohl(packet.header.seq_num), payload_len);
 }
@@ -316,7 +317,7 @@ bool myu::TcpSession::_handle_retransmit(std::shared_ptr<myu_tcp_packet> packet,
     _calculate_checksum(*packet);
     sockaddr_in dest_;
     uv_ip4_addr(get_remote_ip().c_str(), get_remote_port(), &dest_);
-    udp_driver_.send_packet(*packet, dest_);
+    udp_driver_.send_packet(packet, dest_);
 
     return true;
 }
@@ -486,13 +487,14 @@ void myu::TcpSession::input(const myu::myu_tcp_packet &packet) {
     }
     // update the peer usable window size according to the window size field in the header of the packet, which is the size of bytes the peer can accept
     _set_peer_usable_window_size(packet.header.window_size);
-
+    spdlog::info("test: will enter the switch case");
     // according to now state, call the corresponding handler function to handle the packet
     switch (state_) {
         case TcpState::CLOSED:
             user_want_to_close_ = false;
             break;
         case TcpState::LISTEN:
+            spdlog::info("will enter handle listen");
             handle_listen(packet);
             break;
         case TcpState::SYN_SENT:

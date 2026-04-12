@@ -20,19 +20,29 @@ void UdpDriver::init(uv_loop_t* loop, const char* listen_ip, int listen_port) {
     spdlog::info("UDP Driver started on {}:{}", listen_ip, listen_port);
 }
 
-void UdpDriver::send_packet(const myu::myu_tcp_packet &packet, const sockaddr_in &dest_addr) {
+void UdpDriver::send_packet(std::shared_ptr<myu::myu_tcp_packet> packet, const sockaddr_in &dest_addr) {
     // simulate packet loss
     if ((static_cast<float>(rand()) / RAND_MAX) < loss_rate_) {
-        spdlog::warn("Packet seq={} LOST (Simulated)", packet.header.seq_num);
+        spdlog::warn("Packet seq={} LOST (Simulated)", packet.get()->header.seq_num);
         return;
     }
+
+    struct Ctx {
+            std::shared_ptr<myu::myu_tcp_packet> packet;
+            uv_buf_t* buf;
+    };
     spdlog::info("Actually sending to {}:{}", _get_ip_str(dest_addr), ntohs(dest_addr.sin_port));
-    uv_buf_t buf = uv_buf_init((char*)(&packet), sizeof(myu::myu_tcp_packet));
+    uv_buf_t* heap_buf = new uv_buf_t(uv_buf_init((char*)packet.get(), sizeof(*packet)));
     uv_udp_send_t *send_req = new uv_udp_send_t();
-    uv_udp_send(send_req, &udp_handle_, &buf, 1, reinterpret_cast<const sockaddr *>(&dest_addr), [](uv_udp_send_t *req, int status) {
+    Ctx* context = new Ctx(packet, heap_buf);
+    spdlog::info("test: checkpoint 1");
+    send_req->data = context;
+    uv_udp_send(send_req, &udp_handle_, heap_buf, 1, reinterpret_cast<const sockaddr *>(&dest_addr), [](uv_udp_send_t *req, int status) {
         if (status < 0) {
             spdlog::error("UDP send error: {}", uv_strerror(status));
         }
+        Ctx* ctx = (Ctx*)req->data;
+        delete ctx;
         delete req;
     });
 }
