@@ -12,15 +12,20 @@ namespace myu {
     private:
         uv_loop_t *loop_;
         std::map<std::pair<std::string, uint16_t>, std::unique_ptr<TcpSession> > tcp_sessions_;
-        UdpDriver udp_driver_;
+
 
     public:
+        UdpDriver *udp_driver_;
+
+        TcpStack(const TcpStack&) = delete;
+        TcpStack& operator=(const TcpStack&) = delete;
+
         TcpStack(const char *listen_ip, uint16_t listen_port) {
             loop_ = new uv_loop_t;
             tcp_sessions_ = std::map<std::pair<std::string, uint16_t>, std::unique_ptr<TcpSession> >();
             uv_loop_init(loop_);
-            udp_driver_ = UdpDriver();
-            udp_driver_.init(loop_, listen_ip, listen_port);
+            udp_driver_ = new UdpDriver();
+            udp_driver_->init(loop_, listen_ip, listen_port);
         }
 
         ~TcpStack() {
@@ -33,7 +38,7 @@ namespace myu {
 
             new_session->set_remote_addr(remote_ip.c_str(), remote_port);
 
-            spdlog::info("test: now the ip = {} and port = {}", new_session->get_remote_ip(), new_session->get_remote_port());
+            spdlog::info("Create a session, the remote's ip = {} and port = {}", new_session->get_remote_ip(), new_session->get_remote_port());
 
             auto key = std::make_pair(remote_ip, remote_port);
 
@@ -44,12 +49,11 @@ namespace myu {
 
         void listen() {
             // get the remote addr
-            std::string remote_ip;
-            uint16_t remote_port;
-            udp_driver_.set_on_receive([&](const myu::myu_tcp_packet &packet, const sockaddr_in &addr) {
+            udp_driver_->set_on_receive([&](const myu::myu_tcp_packet &packet, const sockaddr_in &addr) {
                 spdlog::info("Received packet from {}:{}", _get_ip_str(addr), ntohs(addr.sin_port));
-                remote_ip = _get_ip_str(addr);
-                remote_port = ntohs(addr.sin_port);
+                std::string remote_ip = _get_ip_str(addr);
+                uint16_t remote_port = ntohs(addr.sin_port);
+                spdlog::info("!!the remote ip = {}, the remote port = {}", remote_ip, remote_port);
 
                 // check the remote addr whether in the local sessions
                 // if the addr exists, then open this session, verify the session state and use input function
@@ -62,9 +66,9 @@ namespace myu {
                     // only the syn packet would enter this branch
                     // if the packet is not syn packet, it means that some errors occurred.
                     if (packet.header.syn) {
+                        spdlog::info("Received SYN packet from {}:{}. Create a new session for this connection.", remote_ip, remote_port);
                         TcpSession *new_session = create_session(remote_ip, remote_port);
                         new_session->set_remote_addr(remote_ip.c_str(), remote_port);
-                        spdlog::info("test: ready to read packet");
                         new_session->listen();
                         new_session->input(packet);
                     } else {
@@ -73,7 +77,7 @@ namespace myu {
                         uv_ip4_addr(remote_ip.c_str(), remote_port, &dest);
                         std::shared_ptr<myu::myu_tcp_packet> packet_= std::make_shared<myu::myu_tcp_packet>();
                         packet_.get()->header.rst = 1;
-                        udp_driver_.send_packet(packet_, dest);
+                        udp_driver_->send_packet(packet_, dest);
                     }
                 }
             });
@@ -93,7 +97,7 @@ namespace myu {
             for (auto& it : tcp_sessions_) {
                 it.second->close();
             }
-            udp_driver_.stop();
+            udp_driver_->stop();
             tcp_sessions_.clear();
             while (uv_loop_alive(loop_)) {
                 uv_run(loop_, UV_RUN_ONCE);

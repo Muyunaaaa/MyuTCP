@@ -51,9 +51,9 @@ void TimerManager::drop_all_timers() {
             delete t;
         });
 
+        it = timers_.erase(it);
         spdlog::info("drop timer whose seq = {} ", seq);
     }
-    timers_.clear();
 }
 
 // ack number, it means the packet to be sent, so its timer may has been started but not timeout yet
@@ -62,7 +62,7 @@ void TimerManager::stop_timers_up_to(uint32_t ack_num) {
     // because the map is ordered by key, we can use lower_bound to find the first timer whose seq is greater than or equal to ack_num
     auto it_end = timers_.lower_bound(ack_num);
 
-    for (auto it = timers_.begin(); it != it_end;) {
+    for (auto it = timers_.begin(); it != it_end; ++it) {
         uint32_t seq = it->first;
         uv_timer_t *timer = it->second;
 
@@ -97,7 +97,7 @@ void TimerManager::start_timer(uint32_t seq_num, uint64_t timeout_ms, std::funct
 }
 
 void TimerManager::stop_all_timers() {
-    for (auto it = timers_.begin(); it != timers_.end();) {
+    for (auto it = timers_.begin(); it != timers_.end(); ++it) {
         uint32_t seq = it->first;
         uv_timer_t *timer = it->second;
 
@@ -122,4 +122,3 @@ TimerManager::~TimerManager() {
     }
     spdlog::warn("TimeManager destroyed, all timers cancelled.");
 }
-

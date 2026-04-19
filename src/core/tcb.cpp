@@ -5,7 +5,7 @@
 #include "spdlog/spdlog.h"
 #include "util/gen_iss.h"
 
-myu::TcpSession::TcpSession(uv_loop_t *loop, UdpDriver &udp_driver)
+myu::TcpSession::TcpSession(uv_loop_t *loop, UdpDriver* udp_driver)
     : timer_manager_(loop), udp_driver_(udp_driver), loop_(loop) {
     state_ = TcpState::CLOSED;
     std::random_device rd;
@@ -109,7 +109,8 @@ void myu::TcpSession::_transition_to(TcpState new_state) {
 }
 
 bool myu::TcpSession::_handle_ack(const myu::myu_tcp_packet &packet) {
-    uint32_t ack_num = packet.header.ack_num;
+    uint32_t ack_num = ntohl(packet.header.ack_num);
+    uint32_t peer_window = ntohs(packet.header.window_size);
     // ack value means that the seq_num would accept next time
     // check if the ack number is valid, it should be in the range of (send_unack_, send_next_]
     if (ack_num > send_window_.send_unack_ && ack_num <= send_window_.send_next_) {
@@ -125,7 +126,7 @@ bool myu::TcpSession::_handle_ack(const myu::myu_tcp_packet &packet) {
         send_window_.send_unack_ = ack_num;
 
         // todo: we need to adjust the strategy for updating the window size, here we just set it as the size of the peer window can accept
-        send_window_.send_window_size_ = packet.header.window_size;
+        send_window_.send_window_size_ = peer_window;
 
         _handle_try_send();
 
@@ -138,7 +139,7 @@ bool myu::TcpSession::_handle_ack(const myu::myu_tcp_packet &packet) {
 }
 
 bool myu::TcpSession::_handle_incoming_packet(const myu::myu_tcp_packet &packet) {
-    uint32_t seq_num = packet.header.seq_num;
+    uint32_t seq_num = ntohl(packet.header.seq_num);
     // check if the packet is in order, it should be equal to recv_next_
     if (seq_num == recv_window_.recv_next_) {
         if (recv_buffer_.push_batch(packet.payload)) {
@@ -209,7 +210,8 @@ void myu::TcpSession::_send_pure_ack(uint32_t ack_num) {
 
     sockaddr_in dest;
     uv_ip4_addr(get_remote_ip().c_str(), get_remote_port(), &dest);
-    udp_driver_.send_packet(packet_ptr, dest);
+    spdlog::info("Send Pure ACK to {}:{}", get_remote_ip(), get_remote_port());
+    udp_driver_->send_packet(packet_ptr, dest);
 
     spdlog::debug("Sent Pure ACK: ack_num = {}, window = {}", ack_num, ntohs(packet.header.window_size));
 }
@@ -239,13 +241,16 @@ void myu::TcpSession::_send_control_packet(uint8_t flags) {
 
     packet.header.window_size = htons(static_cast<uint16_t>(get_usable_recv_window_size()));
 
-    sockaddr_in dest;
-    uv_ip4_addr(get_remote_ip().c_str(), get_remote_port(), &dest);
+    std::string remote_ip = get_remote_ip();
+    uint16_t remote_port = get_remote_port();
 
+    sockaddr_in dest;
+    uv_ip4_addr(remote_ip.c_str(),remote_port, &dest);
+    spdlog::info("Send Control packet to {}:{}", remote_ip, remote_port);
     std::shared_ptr<myu_tcp_packet> packet_ptr = std::make_shared<myu_tcp_packet>(packet);
     if (packet.header.syn || packet.header.fin) {
-        timer_manager_.start_timer(send_window_.send_next_, get_timeout_ms(), [this, packet_ptr]() {
-            _handle_retransmit(packet_ptr, 0, ntohl(packet_ptr->header.seq_num), get_timeout_ms());
+        timer_manager_.start_timer(send_window_.send_next_, get_timeout_ms(), [this, packet_ptr, remote_ip, remote_port]() {
+            _handle_retransmit(packet_ptr, 0, ntohl(packet_ptr->header.seq_num), get_timeout_ms(), remote_ip, remote_port);
             spdlog::info("Retransmitted control packet with seq {}, flags {}", ntohl(packet_ptr->header.seq_num),
                          packet_ptr->header.syn ? "SYN" : "FIN");
         });
@@ -253,7 +258,7 @@ void myu::TcpSession::_send_control_packet(uint8_t flags) {
     }
 
     _calculate_checksum(*packet_ptr);
-    udp_driver_.send_packet(packet_ptr, dest);
+    udp_driver_->send_packet(packet_ptr, dest);
 }
 
 void myu::TcpSession::_send_payload_packet(const std::vector<uint8_t> &payload, uint8_t flags) {
@@ -287,13 +292,13 @@ void myu::TcpSession::_send_payload_packet(const std::vector<uint8_t> &payload, 
     send_window_.send_next_ += payload_len;
 
     _calculate_checksum(*packet_ptr);
-    udp_driver_.send_packet(packet_ptr, dest);
+    udp_driver_->send_packet(packet_ptr, dest);
 
     spdlog::info("Sent Data: seq = {}, len = {}", ntohl(packet.header.seq_num), payload_len);
 }
 
 bool myu::TcpSession::_handle_retransmit(std::shared_ptr<myu_tcp_packet> packet, uint32_t retransmit_count,
-                                         uint32_t retr_seq_num, uint64_t next_timeout_ms) {
+                                         uint32_t retr_seq_num, uint64_t next_timeout_ms, std::string captured_ip, uint16_t captured_port) {
     packet->header.ack_num = htonl(recv_window_.recv_next_);
     packet->header.window_size = htons(static_cast<uint16_t>(get_usable_recv_window_size()));
 
@@ -308,16 +313,16 @@ bool myu::TcpSession::_handle_retransmit(std::shared_ptr<myu_tcp_packet> packet,
     uint64_t next_timeout_ = next_timeout_ms * (1 << retransmit_count);
     spdlog::debug("this packet has been retransmit {} times, then the timeout_ms is {}", retransmit_count,
                   next_timeout_);
-    timer_manager_.start_timer(retr_seq_num, next_timeout_, [this, packet,retransmit_count]() {
-        _handle_retransmit(packet, retransmit_count, ntohl(packet->header.seq_num));
+    timer_manager_.start_timer(retr_seq_num, next_timeout_, [this, packet,retransmit_count, captured_ip, captured_port]() {
+        _handle_retransmit(packet, retransmit_count, ntohl(packet->header.seq_num), get_timeout_ms(), captured_ip, captured_port);
         spdlog::info("Retransmitted data packet with seq {}, len {}",
                      ntohl(packet->header.seq_num), packet->payload.size());
     });
 
     _calculate_checksum(*packet);
     sockaddr_in dest_;
-    uv_ip4_addr(get_remote_ip().c_str(), get_remote_port(), &dest_);
-    udp_driver_.send_packet(packet, dest_);
+    uv_ip4_addr(captured_ip.c_str(), captured_port, &dest_);
+    udp_driver_->send_packet(packet, dest_);
 
     return true;
 }
@@ -486,15 +491,13 @@ void myu::TcpSession::input(const myu::myu_tcp_packet &packet) {
         return;
     }
     // update the peer usable window size according to the window size field in the header of the packet, which is the size of bytes the peer can accept
-    _set_peer_usable_window_size(packet.header.window_size);
-    spdlog::info("test: will enter the switch case");
+    _set_peer_usable_window_size(ntohs(packet.header.window_size));
     // according to now state, call the corresponding handler function to handle the packet
     switch (state_) {
         case TcpState::CLOSED:
             user_want_to_close_ = false;
             break;
         case TcpState::LISTEN:
-            spdlog::info("will enter handle listen");
             handle_listen(packet);
             break;
         case TcpState::SYN_SENT:
@@ -532,6 +535,11 @@ void myu::TcpSession::connect() {
 
     _transition_to(TcpState::SYN_SENT);
 
+    udp_driver_->set_on_receive([&](const myu::myu_tcp_packet &packet, const sockaddr_in &addr) {
+        spdlog::info("Received packet from {}:{}", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+        this->input(packet);
+    });
+
     // initialize the send_window with a random number
     uint32_t iss = _generate_initial_seq();
     send_window_.send_next_ = iss;
@@ -564,11 +572,18 @@ void myu::TcpSession::listen() {
 
 
 void myu::TcpSession::handle_syn_sent(const myu::myu_tcp_packet &packet) {
+    uint32_t ack_num = ntohl(packet.header.ack_num);
+    uint32_t seq_num = ntohl(packet.header.seq_num);
+    uint32_t expected_ack = send_window_.send_unack_ + 1;
     if (packet.header.syn && packet.header.ack) {
-        if (packet.header.ack_num != send_window_.send_unack_ + 1) return;
-        recv_window_.recv_next_ = packet.header.seq_num + 1;
-        send_window_.send_unack_ = packet.header.ack_num;
-        timer_manager_.stop_timer(send_window_.send_unack_ - 1);
+        if (ack_num != expected_ack) {
+            spdlog::warn("Received SYN-ACK packet with unexpected ack_num {}, expected ack_num is {}",
+                         ack_num, expected_ack);
+            return;
+        }
+        recv_window_.recv_next_ = seq_num + 1;
+        send_window_.send_unack_ = ack_num;
+        timer_manager_.stop_timer(expected_ack - 1);
         _send_pure_ack(recv_window_.recv_next_);
         _transition_to(ESTABLISHED);
         if (on_established_cb_) { on_established_cb_(); }
@@ -576,29 +591,36 @@ void myu::TcpSession::handle_syn_sent(const myu::myu_tcp_packet &packet) {
     } else if (packet.header.syn) {
         // it means that the peer also send a SYN packet to us
         // we should reply with a SYN-ACK packet, and transition to SYN_RECEIVED state
-        recv_window_.recv_next_ = packet.header.seq_num + 1;
+        recv_window_.recv_next_ = seq_num + 1;
         _transition_to(SYN_RECEIVED);
         _send_control_packet(FLAG_SYN | FLAG_ACK);
     }
 }
 
 void myu::TcpSession::handle_fin_wait_1(const myu::myu_tcp_packet &packet) {
-    if (packet.header.ack && packet.header.ack_num == send_window_.send_unack_ + 1) {
+    uint32_t incoming_ack = ntohl(packet.header.ack_num);
+    uint32_t peer_seq = ntohl(packet.header.seq_num);
+    uint32_t expected_ack = send_window_.send_unack_ + 1;
+
+    if (packet.header.ack && incoming_ack == expected_ack) {
         _transition_to(TcpState::FIN_WAIT_2);
-        send_window_.send_unack_ = send_window_.send_unack_ + 1;
-        timer_manager_.stop_timer(send_window_.send_unack_ - 1);
-    } else if (packet.header.fin) {
-        recv_window_.recv_next_ = packet.header.seq_num + 1;
+        send_window_.send_unack_ = incoming_ack;
+        timer_manager_.stop_timer(incoming_ack - 1);
+    }
+    if (packet.header.fin) {
+        recv_window_.recv_next_ = peer_seq + 1;
         _send_pure_ack(recv_window_.recv_next_);
-        _transition_to(CLOSE_WAIT);
+        _transition_to(TcpState::CLOSE_WAIT);
     }
 }
 
 void myu::TcpSession::handle_fin_wait_2(const myu::myu_tcp_packet &packet) {
     if (packet.header.fin) {
-        recv_window_.recv_next_ = packet.header.seq_num + 1;
+        uint32_t peer_seq = ntohl(packet.header.seq_num);
+        recv_window_.recv_next_ = peer_seq + 1;
         _send_pure_ack(recv_window_.recv_next_);
-        _transition_to(TIME_WAIT);
+        _transition_to(TcpState::TIME_WAIT);
+        _start_2msl_timer();
     }
 }
 
@@ -607,7 +629,8 @@ void myu::TcpSession::handle_timed_wait(const myu::myu_tcp_packet &packet) {
     _start_2msl_timer();
     // if we receive a duplicate FIN packet, we should resend the ACK packet
     if (packet.header.fin) {
-        recv_window_.recv_next_ = packet.header.seq_num + 1;
+        uint32_t peer_seq = ntohl(packet.header.seq_num);
+        recv_window_.recv_next_ = peer_seq + 1;
         _send_pure_ack(recv_window_.recv_next_);
     }
 }
@@ -615,14 +638,14 @@ void myu::TcpSession::handle_timed_wait(const myu::myu_tcp_packet &packet) {
 void myu::TcpSession::handle_listen(const myu::myu_tcp_packet &packet) {
     if (!packet.header.syn) return;
 
+    uint32_t client_isn = ntohl(packet.header.seq_num);
+
     // initialize the send_window with a random number
     uint32_t iss = _generate_initial_seq();
     send_window_.send_next_ = iss;
     send_window_.send_unack_ = iss;
 
-    recv_window_.recv_next_ = packet.header.seq_num + 1;
-    send_window_.send_unack_ = iss;
-    send_window_.send_next_ = iss;
+    recv_window_.recv_next_ = client_isn + 1;
 
     // bind the remote addr
     set_remote_addr(get_remote_ip().c_str(), get_remote_port());
@@ -635,9 +658,15 @@ void myu::TcpSession::handle_listen(const myu::myu_tcp_packet &packet) {
 
 void myu::TcpSession::handle_syn_received(const myu::myu_tcp_packet &packet) {
     if (!packet.header.ack) return;
-    if (packet.header.ack_num != send_window_.send_unack_ + 1) return;
-    send_window_.send_unack_ = send_window_.send_unack_ + 1;
-    timer_manager_.stop_timer(send_window_.send_unack_ - 1);
+
+    uint32_t incoming_ack = ntohl(packet.header.ack_num);
+    uint32_t expected_ack = send_window_.send_unack_ + 1;
+
+    if (incoming_ack != expected_ack) return;
+
+    send_window_.send_unack_ = incoming_ack;
+    timer_manager_.stop_timer(incoming_ack - 1);
+
     _transition_to(TcpState::ESTABLISHED);
     if (on_established_cb_) { on_established_cb_(); }
     _handle_try_send();
@@ -655,13 +684,18 @@ void myu::TcpSession::handle_close_wait(const myu::myu_tcp_packet &packet) {
 
 void myu::TcpSession::handle_last_ack(const myu::myu_tcp_packet &packet) {
     if (!packet.header.ack) return;
-    if (packet.header.ack_num != send_window_.send_unack_ + 1) return;
-    _transition_to(TcpState::CLOSED);
-    send_window_.send_unack_ = send_window_.send_unack_ + 1;
-    timer_manager_.stop_timer(send_window_.send_unack_ - 1);
-     if (on_closed_cb_) { on_closed_cb_(); }
-}
 
+    uint32_t incoming_ack = ntohl(packet.header.ack_num);
+    uint32_t expected_ack = send_window_.send_unack_ + 1;
+
+    if (incoming_ack != expected_ack) return;
+
+    send_window_.send_unack_ = incoming_ack;
+    timer_manager_.stop_timer(incoming_ack - 1);
+
+    _transition_to(TcpState::CLOSED);
+    if (on_closed_cb_) { on_closed_cb_(); }
+}
 
 void myu::TcpSession::handle_reset() {
     timer_manager_.stop_all_timers();
@@ -674,6 +708,7 @@ void myu::TcpSession::handle_reset() {
 
 void myu::TcpSession::handle_established(const myu::myu_tcp_packet &packet) {
     size_t payload_len = packet.payload.size();
+    uint32_t peer_seq = ntohl(packet.header.seq_num);
 
     if (packet.header.ack) {
         _handle_ack(packet);
@@ -686,10 +721,9 @@ void myu::TcpSession::handle_established(const myu::myu_tcp_packet &packet) {
     }
 
     if (packet.header.fin) {
-        recv_window_.recv_next_ = packet.header.seq_num + 1;
+        recv_window_.recv_next_ = peer_seq + 1;
         _send_pure_ack(recv_window_.recv_next_);
-
-        _transition_to(CLOSE_WAIT);
+        _transition_to(TcpState::CLOSE_WAIT);
     }
 }
 

@@ -25,6 +25,8 @@ add_executable(tcp_realization src/main.cpp
         include/core/stack.h
         include/util/gen_iss.h
         include/util/parse_ip.h
+        src/server.cpp
+        src/client.cpp
 )
 
 target_include_directories(tcp_realization PRIVATE

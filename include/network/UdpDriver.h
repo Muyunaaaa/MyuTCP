@@ -11,6 +11,9 @@ public:
     UdpDriver() = default;
     ~UdpDriver() = default;
 
+    UdpDriver(const UdpDriver&) = delete;
+    UdpDriver& operator=(const UdpDriver&) = delete;
+
     void init(uv_loop_t* loop, const char* listen_ip, int listen_port);
 
     // set callback function when receive packet
@@ -28,7 +31,7 @@ public:
         }
     }
 private:
-    uv_udp_t udp_handle_;
+    uv_udp_t* udp_handle_ = nullptr;
     OnRecCallBack on_receive_callback_;
     float loss_rate_ = 0.0f;
 

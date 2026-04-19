@@ -63,7 +63,7 @@ namespace myu {
         std::map<uint32_t, std::vector<uint8_t> > ooo_map_; // out-of-order packet map, key is the seq number
 
         TimerManager timer_manager_;
-        UdpDriver &udp_driver_;
+        UdpDriver* udp_driver_;
 
         const char *listener_ip_;
         uint16_t listener_port_;
@@ -114,7 +114,8 @@ namespace myu {
         // 3. restart the timer using timer_manager_, may double the timeout for next time
         // if there too mant times to retransmit, we can consider the connection is broken and close it
         bool _handle_retransmit(std::shared_ptr<myu_tcp_packet> packet, uint32_t retransmit_count = 0,
-                                uint32_t retr_seq_num = 0, uint64_t next_timeout_ms = 2000);
+                                uint32_t retr_seq_num = 0, uint64_t next_timeout_ms = 2000,
+                                std::string captured_ip = "127.0.0.1", uint16_t captured_port = 9999);
 
         // when the state is ESTABLISHED and user use send function, we try to send the data in send_buffer_
         // if the sending window is not full, otherwise we just put the data in send_buffer_ and wait for the window to be available
@@ -135,7 +136,7 @@ namespace myu {
         bool _verify_checksum(const myu::myu_tcp_packet &packet);
 
     public:
-        TcpSession(uv_loop_t* loop, UdpDriver &udp_driver);
+        TcpSession(uv_loop_t* loop, UdpDriver *udp_driver);
 
         // lifetime control
         void connect(); // three handshake
