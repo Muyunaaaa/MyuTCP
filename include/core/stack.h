@@ -10,11 +10,11 @@
 namespace myu {
     class TcpStack {
     private:
-        uv_loop_t *loop_;
         std::map<std::pair<std::string, uint16_t>, std::unique_ptr<TcpSession> > tcp_sessions_;
 
 
     public:
+        uv_loop_t *loop_;
         UdpDriver *udp_driver_;
 
         TcpStack(const TcpStack&) = delete;

@@ -555,6 +555,10 @@ void myu::TcpSession::close() {
         user_want_to_close_ = true;
     }else if (get_state() == CLOSE_WAIT) {
         user_want_to_close_ = true;
+    }else {
+        spdlog::warn("User want to close the connection, but the current state is {}, so the close operation cannot be performed immediately",
+                     state_to_string(get_state()));
+        user_want_to_close_ = true;
     }
 }
 
