@@ -49,8 +49,6 @@ void UdpDriver::send_packet(std::shared_ptr<myu::myu_tcp_packet> packet, const s
     ctx->req.data = ctx;
     ctx->dest_addr = dest_addr;
 
-    spdlog::info("Actually sending to {}:{}", _get_ip_str(dest_addr), ntohs(dest_addr.sin_port));
-
     sockaddr_in dest_addr_copy;
     memcpy(&dest_addr_copy, &dest_addr, sizeof(sockaddr_in));
 

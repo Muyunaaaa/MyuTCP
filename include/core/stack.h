@@ -53,7 +53,6 @@ namespace myu {
                 spdlog::info("Received packet from {}:{}", _get_ip_str(addr), ntohs(addr.sin_port));
                 std::string remote_ip = _get_ip_str(addr);
                 uint16_t remote_port = ntohs(addr.sin_port);
-                spdlog::info("!!the remote ip = {}, the remote port = {}", remote_ip, remote_port);
 
                 // check the remote addr whether in the local sessions
                 // if the addr exists, then open this session, verify the session state and use input function
@@ -65,7 +64,7 @@ namespace myu {
                 } else {
                     // only the syn packet would enter this branch
                     // if the packet is not syn packet, it means that some errors occurred.
-                    if (packet.header.syn) {
+                    if (packet.header.flags & FLAG_SYN) {
                         spdlog::info("Received SYN packet from {}:{}. Create a new session for this connection.", remote_ip, remote_port);
                         TcpSession *new_session = create_session(remote_ip, remote_port);
                         new_session->set_remote_addr(remote_ip.c_str(), remote_port);
@@ -76,7 +75,7 @@ namespace myu {
                         sockaddr_in dest;
                         uv_ip4_addr(remote_ip.c_str(), remote_port, &dest);
                         std::shared_ptr<myu::myu_tcp_packet> packet_= std::make_shared<myu::myu_tcp_packet>();
-                        packet_.get()->header.rst = 1;
+                        packet_.get()->header.flags = FLAG_RST;
                         udp_driver_->send_packet(packet_, dest);
                     }
                 }

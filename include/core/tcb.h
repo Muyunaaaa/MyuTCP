@@ -187,7 +187,7 @@ namespace myu {
         }
 
         uint32_t get_usable_recv_window_size() const {
-            return recv_window_.get_usable_window_size();
+            return recv_buffer_.capacity() - recv_buffer_.size();
         }
 
         // handle fsm
