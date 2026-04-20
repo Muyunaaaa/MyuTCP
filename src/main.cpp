@@ -23,7 +23,7 @@ int main() {
         s->close();
 
         uv_timer_stop(handle);
-    }, 10000, 0);
+    }, 20000, 0);
 
     // fixme: when the user call close function, whatever the state is, we just transition to CLOSED state and close the session
     session->close();

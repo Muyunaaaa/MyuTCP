@@ -65,9 +65,9 @@ namespace myu {
         TimerManager timer_manager_;
         UdpDriver* udp_driver_;
 
-        const char *listener_ip_;
+        std::string listener_ip_;
         uint16_t listener_port_;
-        const char *remote_ip_;
+        std::string remote_ip_;
         uint16_t remote_port_;
 
         uv_loop_t* loop_ = nullptr;
@@ -78,6 +78,9 @@ namespace myu {
         // save the usable window size of peer, which is updated when receive packet, and used to calculate the usable window size for sending
         uint64_t timeout_ms_ = 2000;
         // default timeout for retransmission, it can be adjusted according to the network condition
+
+        // when the server is at CLOSE_WAIT and the buffer is empty, if this flag is true, we will close the connection immediately
+        bool auto_close_on_eof = true;
 
         // !!! to be sure that all timers are stopped when the session is closed
         // otherwise the timer callback function may be called after the session is closed, which may cause undefined behavior
@@ -213,6 +216,8 @@ namespace myu {
         uint16_t get_listener_port() const { return listener_port_; }
         std::string get_remote_ip() const { return remote_ip_; }
         uint16_t get_remote_port() const { return remote_port_; }
+
+        // the listener_ip is a std::string, this will cause deep copy
         void set_listener_addr(const char *ip, uint16_t port) {
             listener_ip_ = ip;
             listener_port_ = port;
