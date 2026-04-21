@@ -16,26 +16,20 @@ int main() {
     std::string message = "Hello, Server!";
     session->send(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(message.data()), message.size()));
 
-    uv_timer_t delay_req;
-    uv_timer_init(client->loop_, &delay_req);
-    delay_req.data = session;
-
-    uv_timer_start(&delay_req, [](uv_timer_t* handle) {
-        auto* s = static_cast<myu::TcpSession*>(handle->data);
-        spdlog::info("Delay finished, now closing session...");
-        s->close();
-
-        uv_timer_stop(handle);
-    }, 10000, 0);
+    // uv_timer_t delay_req;
+    // uv_timer_init(client->loop_, &delay_req);
+    // delay_req.data = session;
+    //
+    // uv_timer_start(&delay_req, [](uv_timer_t* handle) {
+    //     auto* s = static_cast<myu::TcpSession*>(handle->data);
+    //     spdlog::info("Delay finished, now closing session...");
+    //     s->close();
+    //
+    //     uv_timer_stop(handle);
+    // }, 10000, 0);
 
     // fixme: when the user call close function, whatever the state is, we just transition to CLOSED state and close the session
     session->close();
-
-    // todo:
-    // 1. we need to test more than one client connect to the server at the same time
-    // 2. we need to test send and recv interface to make sure they work well, and the data is correct
-    // 3. fix the FSM when the connection is closing.
-    // 4. fix the FSM which would not transform to the listen state when the session is closed and a client try to connect it.
 
     client->run();
 }

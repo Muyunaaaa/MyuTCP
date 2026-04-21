@@ -52,6 +52,36 @@ namespace myu {
         FLAG_CWR = 0x80 // 1000 0000
     };
 
+    inline std::string to_string(TcpFlag flag) {
+        switch (flag) {
+            case FLAG_FIN: return "FIN";
+            case FLAG_SYN: return "SYN";
+            case FLAG_RST: return "RST";
+            case FLAG_PSH: return "PSH";
+            case FLAG_ACK: return "ACK";
+            case FLAG_URG: return "URG";
+            case FLAG_ECE: return "ECE";
+            case FLAG_CWR: return "CWR";
+            default: return "UNKNOWN_FLAG";
+        }
+    }
+
+    inline std::string parse_flags_to_string(uint8_t flags) {
+        switch (flags) {
+            case 0x01: return "FLAG_FIN";
+            case 0x02: return "FLAG_SYN";
+            case 0x04: return "FLAG_RST";
+            case 0x08: return "FLAG_PSH";
+            case 0x10: return "FLAG_ACK";
+            case 0x20: return "FLAG_URG";
+            case 0x40: return "FLAG_ECE";
+            case 0x80: return "FLAG_CWR";
+            case 0x11: return "FLAG_FIN_ACK";
+            case 0x12: return "FLAG_SYN_ACK";
+            default: throw std::invalid_argument("Invalid TCP flag value");
+        }
+    }
+
     class TcpSession {
         using NotifyStackCb = std::function<void(TcpSession*)>;
     private:
@@ -142,6 +172,12 @@ namespace myu {
         // mark the session whether already is in the ready queue.
         bool is_in_ready_queue_ = false;
 
+    public:
+        // when the server is at CLOSE_WAIT and the buffer is empty, if this flag is true, we will close the connection immediately
+        bool auto_close_on_eof = true;
+
+        void set_in_ready_queue(bool in) { is_in_ready_queue_ = in; }
+
         // when the session is ready to be processed, we call this function to notify the stack, and the stack will put this session into the ready queue.
         void _trigger_event() {
             if (!is_in_ready_queue_ && notify_stack_cb_) {
@@ -149,12 +185,6 @@ namespace myu {
                 notify_stack_cb_(this);
             }
         }
-
-    public:
-        // when the server is at CLOSE_WAIT and the buffer is empty, if this flag is true, we will close the connection immediately
-        bool auto_close_on_eof = true;
-
-        void set_in_ready_queue(bool in) { is_in_ready_queue_ = in; }
 
         void set_notify_cb(NotifyStackCb cb) { notify_stack_cb_ = std::move(cb); }
 
@@ -173,6 +203,7 @@ namespace myu {
         size_t send(std::span<const uint8_t> data);
 
         size_t recv(std::span<uint8_t> buf);
+        std::span<uint8_t> read_all();
 
         size_t available() const; // return the size of data that can be read from recv_buffer_
 

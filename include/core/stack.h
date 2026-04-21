@@ -12,7 +12,7 @@ namespace myu {
     private:
         std::map<std::pair<std::string, uint16_t>, std::unique_ptr<TcpSession> > tcp_sessions_;
         // idle handle for checking the ready queue and call the app logic callback function
-        uv_idle_t idle_handle_;
+        uv_idle_t* idle_handle_;
         // the ready queue for sessions, when the session is ready to be processed,
         // we put it into this queue, and the idle handle will check this queue and call the app logic callback function
         std::vector<TcpSession*> ready_queue_;
@@ -20,13 +20,11 @@ namespace myu {
         using AppLogicCb = std::function<void(TcpSession*)>;
         AppLogicCb app_logic_cb_;
 
-        void set_app_logic(AppLogicCb cb) { app_logic_cb_ = std::move(cb); }
-
         // the session will call this function to push session in the ready queue and start the idle handle to process the ready queue
         void enqueue_ready_session(TcpSession* s) {
             ready_queue_.push_back(s);
-            if (!uv_is_active((uv_handle_t*)&idle_handle_)) {
-                uv_idle_start(&idle_handle_, _on_idle_dispatch);
+            if (!uv_is_active((uv_handle_t*)idle_handle_)) {
+                uv_idle_start(idle_handle_, _on_idle_dispatch);
             }
         }
 
@@ -44,11 +42,16 @@ namespace myu {
             uv_loop_init(loop_);
             udp_driver_ = new UdpDriver();
             udp_driver_->init(loop_, listen_ip, listen_port);
+            idle_handle_ = new uv_idle_t();
+            uv_idle_init(loop_, idle_handle_);
+            idle_handle_->data = this;
         }
 
         ~TcpStack() {
             uv_loop_close(loop_);
             delete loop_;
+            delete udp_driver_;
+            delete idle_handle_;
         }
 
         TcpSession *create_session(std::string remote_ip, uint16_t remote_port) {
@@ -60,12 +63,13 @@ namespace myu {
 
             // this function can be override by user, user can make a buffer as the outer var reference to get the data
             new_session->set_on_data([session_ptr](size_t available) {
-                std::vector<uint8_t> buffer(available);
-                size_t n = session_ptr->recv(buffer);
-                // when the session recive the data, we just print the data to the console, in real application, user can do whatever they want with the data
-                spdlog::info("Received data from {}:{}. Data size = {}, content = {}",
-                             session_ptr->get_remote_ip(), session_ptr->get_remote_port(), n,
-                             std::string(buffer.begin(), buffer.end()));
+                session_ptr->_trigger_event();
+                // std::vector<uint8_t> buffer(available);
+                // size_t n = session_ptr->recv(buffer);
+                // // when the session recive the data, we just print the data to the console, in real application, user can do whatever they want with the data
+                // spdlog::info("Received data from {}:{}. Data size = {}, content = {}",
+                //              session_ptr->get_remote_ip(), session_ptr->get_remote_port(), n,
+                //              std::string(buffer.begin(), buffer.end()));
             });
 
             // this function can be override by user, when the session is closed, the user can do some clean work in this callback function
@@ -95,7 +99,11 @@ namespace myu {
         void listen() {
             // get the remote addr
             udp_driver_->set_on_receive([&](const myu::myu_tcp_packet &packet, const sockaddr_in &addr) {
-                spdlog::info("Received packet from {}:{}", _get_ip_str(addr), ntohs(addr.sin_port));
+                spdlog::info("Received packet from {}:{}, flag: {}",
+                    _get_ip_str(addr),
+                    ntohs(addr.sin_port),
+                    parse_flags_to_string(packet.header.flags)
+                    );
                 std::string remote_ip = _get_ip_str(addr);
                 uint16_t remote_port = ntohs(addr.sin_port);
 
@@ -107,9 +115,9 @@ namespace myu {
                     // it means that the session exists
                     it->second->input(packet);
                 } else {
-                    // only the syn packet would enter this branch
+                    // only the syn packet (not include other flag) would enter this branch
                     // if the packet is not syn packet, it means that some errors occurred.
-                    if (packet.header.flags & FLAG_SYN) {
+                    if (packet.header.flags == FLAG_SYN) {
                         spdlog::info("Received SYN packet from {}:{}. Create a new session for this connection.",
                                      remote_ip, remote_port);
                         TcpSession *new_session = create_session(remote_ip, remote_port);
@@ -158,6 +166,8 @@ namespace myu {
                 spdlog::error("Loop closed while busy! Some handles might not be closed.");
             }
         }
+
+        void set_app_logic(AppLogicCb cb) { app_logic_cb_ = std::move(cb); }
 
         static void _on_idle_dispatch(uv_idle_t* handle) {
             auto* self = static_cast<TcpStack*>(handle->data);

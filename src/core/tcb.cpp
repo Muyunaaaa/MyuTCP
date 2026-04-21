@@ -471,11 +471,29 @@ size_t myu::TcpSession::recv(std::span<uint8_t> buf) {
 
     if (to_read > 0) return to_read;
 
-    if (state_ == TcpState::CLOSE_WAIT || state_ == LAST_ACK || state_ == CLOSED) {
+    if (state_ == TcpState::CLOSE_WAIT || state_ == TcpState::LAST_ACK || state_ == CLOSED) {
         return 0;
     }
 
     return 0;
+}
+
+std::span<uint8_t> myu::TcpSession::read_all() {
+    size_t to_read = recv_buffer_.size();
+    std::vector<uint8_t> data(to_read);
+    for (size_t i = 0; i < to_read; ++i) {
+        data[i] = recv_buffer_.front();
+        recv_buffer_.pop_front(1);
+    }
+
+    if (recv_buffer_.empty() && state_ == TcpState::CLOSE_WAIT) {
+        if (auto_close_on_eof) {
+            spdlog::info("Buffer is empty and we are in CLOSE_WAIT. Closing session.");
+            this->close();
+        }
+    }
+
+    return std::span<uint8_t>(data.data(), data.size());
 }
 
 void myu::TcpSession::input(const myu::myu_tcp_packet &packet) {
@@ -547,7 +565,7 @@ void myu::TcpSession::connect() {
     _transition_to(TcpState::SYN_SENT);
 
     udp_driver_->set_on_receive([&](const myu::myu_tcp_packet &packet, const sockaddr_in &addr) {
-        spdlog::info("Received packet from {}:{}", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+        spdlog::info("Received packet from {}:{}, flag {}", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), parse_flags_to_string(packet.header.flags));
         this->input(packet);
     });
 
@@ -573,11 +591,22 @@ void myu::TcpSession::close() {
         _transition_to(TcpState::LAST_ACK);
         _send_control_packet(FLAG_FIN | FLAG_ACK);
         user_want_to_close_ = true;
+    } else if (get_state() == SYN_SENT) {
+        // if we are in SYN_SENT state, it means that we are trying to connect to the peer,
+        // but we want to give up this connection, so we just transition to CLOSED state directly
+        spdlog::warn("Try to close the connection in SYN_SENT state, transition to CLOSED state directly");
+        _send_control_packet(FLAG_RST);
+        this->timer_manager_.stop_all_timers();
+        _transition_to(TcpState::CLOSED);
+    } else if (get_state() == SYN_RECEIVED){
+        // if we are in SYN_RECEIVED state, it means that we have received a SYN packet from the peer, but we have not received the ACK packet from the peer,
+        // but we want to give up this connection, so we just transition to CLOSED state directly
+        _send_control_packet(FLAG_RST);
+        this->timer_manager_.stop_all_timers();
+        _transition_to(TcpState::CLOSED);
+
     } else {
-        spdlog::warn(
-            "User want to close the connection, but the current state is {}, so the close operation cannot be performed immediately",
-            state_to_string(get_state()));
-        user_want_to_close_ = true;
+        spdlog::warn("Received close request in unexpected state {}, ignore it.", state_to_string(get_state()));
     }
 }
 
@@ -734,11 +763,11 @@ void myu::TcpSession::handle_last_ack(const myu::myu_tcp_packet &packet) {
 
 void myu::TcpSession::handle_reset() {
     timer_manager_.stop_all_timers();
-    if (on_closed_cb_) { on_closed_cb_(); }
     _transition_to(TcpState::CLOSED);
-    if (on_error_cb_) {
-        on_error_cb_("Connection reset by peer");
-    }
+    if (on_closed_cb_) { on_closed_cb_(); }
+    // if (on_error_cb_) {
+    //     on_error_cb_("Connection reset by peer");
+    // }
 }
 
 void myu::TcpSession::handle_established(const myu::myu_tcp_packet &packet) {
