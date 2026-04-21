@@ -9,10 +9,14 @@ set(SFML_SKIP_INSTALL ON CACHE BOOL "" FORCE)
 
 add_subdirectory(vendors/libuv)
 add_subdirectory(vendors/spdlog)
-add_subdirectory(vendors/raylib)
+#add_subdirectory(vendors/raylib)
 #add_subdirectory(vendors/sfml)
 
-add_executable(tcp_realization src/main.cpp
+if(MINGW)
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition")
+endif()
+
+add_executable(tcp_realization
         include/core/segment.h
         include/core/tcb.h
         include/core/sw.h
@@ -25,8 +29,9 @@ add_executable(tcp_realization src/main.cpp
         include/core/stack.h
         include/util/gen_iss.h
         include/util/parse_ip.h
-        src/server.cpp
-        src/client.cpp
+        test/client_instance.cpp
+#        test/server_instance.cpp
+#        src/main.cpp
 )
 
 target_include_directories(tcp_realization PRIVATE
@@ -39,5 +44,5 @@ target_link_libraries(tcp_realization PRIVATE
         uv_a
         spdlog
 #        SFML::Graphics
-        raylib
+#        raylib
 )

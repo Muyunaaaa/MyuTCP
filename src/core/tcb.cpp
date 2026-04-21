@@ -644,7 +644,7 @@ void myu::TcpSession::handle_fin_wait_2(const myu::myu_tcp_packet &packet) {
         spdlog::info("Send a pure ACK packet to {}:{}", get_remote_ip(), get_remote_port());
         _send_pure_ack(recv_window_.recv_next_);
         _transition_to(TcpState::TIME_WAIT);
-        _start_2msl_timer();
+        this->_start_2msl_timer();
     }
 }
 
@@ -766,13 +766,14 @@ void myu::TcpSession::handle_established(const myu::myu_tcp_packet &packet) {
 }
 
 void myu::TcpSession::_start_2msl_timer() {
-    const uint64_t TWO_MSL_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes in milliseconds
-
+    // const uint64_t TWO_MSL_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes in milliseconds
+    const uint64_t TWO_MSL_TIMEOUT_MS = 2 * 1000; // TODO: set it to 2 minutes in the future
     if (!timer_manager_._2msl_timer) {
         timer_manager_._2msl_timer = std::make_unique<uv_timer_t>();
         uv_timer_init(timer_manager_.loop_, timer_manager_._2msl_timer.get());
-        timer_manager_._2msl_timer->data = this;
     }
+
+    timer_manager_._2msl_timer->data = this;
 
     uv_timer_start(timer_manager_._2msl_timer.get(), [](uv_timer_t *handle) {
         auto *session = static_cast<TcpSession *>(handle->data);
