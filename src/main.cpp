@@ -31,8 +31,6 @@ int main() {
     // todo:
     // 1. we need to test more than one client connect to the server at the same time
     // 2. we need to test send and recv interface to make sure they work well, and the data is correct
-    // 3. fix the FSM when the connection is closing.
-    // 4. fix the FSM which would not transform to the listen state when the session is closed and a client try to connect it.
 
     client->run();
 }

@@ -79,9 +79,6 @@ namespace myu {
         uint64_t timeout_ms_ = 2000;
         // default timeout for retransmission, it can be adjusted according to the network condition
 
-        // when the server is at CLOSE_WAIT and the buffer is empty, if this flag is true, we will close the connection immediately
-        bool auto_close_on_eof = true;
-
         // !!! to be sure that all timers are stopped when the session is closed
         // otherwise the timer callback function may be called after the session is closed, which may cause undefined behavior
         void _transition_to(TcpState new_state);
@@ -139,6 +136,9 @@ namespace myu {
         bool _verify_checksum(const myu::myu_tcp_packet &packet);
 
     public:
+        // when the server is at CLOSE_WAIT and the buffer is empty, if this flag is true, we will close the connection immediately
+        bool auto_close_on_eof = true;
+
         TcpSession(uv_loop_t* loop, UdpDriver *udp_driver);
 
         // lifetime control

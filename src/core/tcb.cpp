@@ -58,7 +58,6 @@ void myu::TcpSession::set_on_data(std::function<void(size_t)> callback) {
 void myu::TcpSession::set_on_closed(std::function<void()> callback) {
     if (callback) {
         // if the user set the callback, it means that the user want to control when to close the connection.
-        auto_close_on_eof = false;
         on_closed_cb_ = std::move(callback);
     } else {
         // if the user not set the callback, we provide a default callback function, which give a log when the connection is closed
@@ -730,7 +729,7 @@ void myu::TcpSession::handle_last_ack(const myu::myu_tcp_packet &packet) {
     timer_manager_.stop_timer(incoming_ack - 1);
 
     _transition_to(TcpState::CLOSED);
-    if (on_closed_cb_) { on_closed_cb_(); }
+    if (on_closed_cb_) {on_closed_cb_();}
 }
 
 void myu::TcpSession::handle_reset() {

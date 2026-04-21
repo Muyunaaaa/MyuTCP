@@ -46,8 +46,16 @@ namespace myu {
                 size_t n = session_ptr->recv(buffer);
                 // when the session recive the data, we just print the data to the console, in real application, user can do whatever they want with the data
                 spdlog::info("Received data from {}:{}. Data size = {}, content = {}",
-                             session_ptr->get_remote_ip(),session_ptr->get_remote_port(), n,
+                             session_ptr->get_remote_ip(), session_ptr->get_remote_port(), n,
                              std::string(buffer.begin(), buffer.end()));
+            });
+
+            // this function can be override by user, when the session is closed, the user can do some clean work in this callback function
+            new_session->set_on_closed([this, remote_ip, remote_port]() {
+                // destroy and erase the session from tcp_sessions_ when the session is closed
+                spdlog::info("Stack: Removing session {}:{}", remote_ip, remote_port);
+                auto key = std::make_pair(remote_ip, remote_port);
+                this->tcp_sessions_.erase(key);
             });
 
             spdlog::info("Create a session, the remote's ip = {} and port = {}", new_session->get_remote_ip(),
