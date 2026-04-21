@@ -8,6 +8,7 @@
 #include "TimerManager.h"
 #include "UdpDriver.h"
 
+
 // TCP Control Block
 namespace myu {
     enum TcpState {
@@ -52,6 +53,7 @@ namespace myu {
     };
 
     class TcpSession {
+        using NotifyStackCb = std::function<void(TcpSession*)>;
     private:
         TcpState state_ = TcpState::CLOSED;
 
@@ -135,9 +137,26 @@ namespace myu {
         void _calculate_checksum(myu::myu_tcp_packet &packet);
         bool _verify_checksum(const myu::myu_tcp_packet &packet);
 
+        // the function which notifies the stack that the session is ready to be processed.
+        NotifyStackCb notify_stack_cb_;
+        // mark the session whether already is in the ready queue.
+        bool is_in_ready_queue_ = false;
+
+        // when the session is ready to be processed, we call this function to notify the stack, and the stack will put this session into the ready queue.
+        void _trigger_event() {
+            if (!is_in_ready_queue_ && notify_stack_cb_) {
+                is_in_ready_queue_ = true;
+                notify_stack_cb_(this);
+            }
+        }
+
     public:
         // when the server is at CLOSE_WAIT and the buffer is empty, if this flag is true, we will close the connection immediately
         bool auto_close_on_eof = true;
+
+        void set_in_ready_queue(bool in) { is_in_ready_queue_ = in; }
+
+        void set_notify_cb(NotifyStackCb cb) { notify_stack_cb_ = std::move(cb); }
 
         TcpSession(uv_loop_t* loop, UdpDriver *udp_driver);
 

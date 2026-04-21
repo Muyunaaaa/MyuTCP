@@ -20,5 +20,16 @@ int main() {
     //              std::string(buffer.begin(), buffer.end()));
     // });
 
+    server->set_app_logic([](myu::TcpSession* s) {
+    std::vector<uint8_t> buf(s->available());
+    size_t n = s->recv(buf);
+
+    if (n > 0) {
+        spdlog::info("Received {} bytes from {}:{}", n, s->get_remote_ip(), s->get_remote_port());
+    } else if (s->get_state() == myu::TcpState::CLOSE_WAIT) {
+        spdlog::info("Client disconnected.");
+    }
+});
+
     server->run();
 }

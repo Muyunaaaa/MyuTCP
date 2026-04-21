@@ -11,6 +11,24 @@ namespace myu {
     class TcpStack {
     private:
         std::map<std::pair<std::string, uint16_t>, std::unique_ptr<TcpSession> > tcp_sessions_;
+        // idle handle for checking the ready queue and call the app logic callback function
+        uv_idle_t idle_handle_;
+        // the ready queue for sessions, when the session is ready to be processed,
+        // we put it into this queue, and the idle handle will check this queue and call the app logic callback function
+        std::vector<TcpSession*> ready_queue_;
+
+        using AppLogicCb = std::function<void(TcpSession*)>;
+        AppLogicCb app_logic_cb_;
+
+        void set_app_logic(AppLogicCb cb) { app_logic_cb_ = std::move(cb); }
+
+        // the session will call this function to push session in the ready queue and start the idle handle to process the ready queue
+        void enqueue_ready_session(TcpSession* s) {
+            ready_queue_.push_back(s);
+            if (!uv_is_active((uv_handle_t*)&idle_handle_)) {
+                uv_idle_start(&idle_handle_, _on_idle_dispatch);
+            }
+        }
 
     public:
         uv_loop_t *loop_;
@@ -56,6 +74,12 @@ namespace myu {
                 spdlog::info("Stack: Removing session {}:{}", remote_ip, remote_port);
                 auto key = std::make_pair(remote_ip, remote_port);
                 this->tcp_sessions_.erase(key);
+            });
+
+            // session notify the stack to add this session into the ready queue when the session is ready to be processed,
+            // and the stack will call the app logic callback function to process this session
+            new_session->set_notify_cb([this](TcpSession* session_ptr) {
+                this->enqueue_ready_session(session_ptr);
             });
 
             spdlog::info("Create a session, the remote's ip = {} and port = {}", new_session->get_remote_ip(),
@@ -132,6 +156,25 @@ namespace myu {
 
             if (uv_loop_close(loop_) == UV_EBUSY) {
                 spdlog::error("Loop closed while busy! Some handles might not be closed.");
+            }
+        }
+
+        static void _on_idle_dispatch(uv_idle_t* handle) {
+            auto* self = static_cast<TcpStack*>(handle->data);
+
+            uv_idle_stop(handle);
+
+            if (self->ready_queue_.empty()) return;
+
+            std::vector<TcpSession*> processing_batch;
+            processing_batch.swap(self->ready_queue_);
+
+            for (TcpSession* s : processing_batch) {
+                s->set_in_ready_queue(false);
+
+                if (self->app_logic_cb_) {
+                    self->app_logic_cb_(s);
+                }
             }
         }
     };
