@@ -13,6 +13,9 @@ int main() {
 
     session->connect();
 
+    std::string message = "Hello, Server!";
+    session->send(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(message.data()), message.size()));
+
     uv_timer_t delay_req;
     uv_timer_init(client->loop_, &delay_req);
     delay_req.data = session;
@@ -23,7 +26,7 @@ int main() {
         s->close();
 
         uv_timer_stop(handle);
-    }, 2000, 0);
+    }, 10000, 0);
 
     // fixme: when the user call close function, whatever the state is, we just transition to CLOSED state and close the session
     session->close();
