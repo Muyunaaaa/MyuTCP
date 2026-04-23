@@ -78,6 +78,18 @@ void myu::TcpSession::set_on_error(std::function<void(const std::string &)> call
     }
 }
 
+void myu::TcpSession::set_on_recv_three_dup_ack(std::function<void(uint32_t ack_num)> callback) {
+    if (callback) {
+        on_recv_three_dup_ack = std::move(callback);
+    } else {
+        // if the user not set the callback, we provide a default callback function, which give a log when receive three duplicate ACKs
+        on_recv_three_dup_ack = [this](uint32_t ack_num) {
+            timer_manager_.stop_timer(ack_num);
+            // fixme: we need add a map to save the inflight packets because of we need record the entire packet.
+        }
+    }
+}
+
 bool myu::TcpSession::is_closed() const {
     return state_ == TcpState::CLOSED;
 }

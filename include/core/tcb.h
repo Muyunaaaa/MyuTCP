@@ -16,12 +16,7 @@ namespace myu {
     constexpr  uint32_t RTO_MAX = 60000;
     constexpr uint32_t INITIAL_SSTHRESH = 8;
 
-    // // Session 初始化
-    // srtt = 0;              // 标志位：尚未获得测量值
-    // rttvar = 500;          // 初始抖动建议设为 RTO/2
-    // current_rto = INITIAL_RTO;
-
-    enum TcpState {
+     enum TcpState {
         CLOSED,
         LISTEN,
         SYN_SENT,
@@ -147,6 +142,7 @@ namespace myu {
         std::function<void(size_t)> on_data_cb_; // if the user set the callback, we will call it when receive data, and pass the size of data in the recv_buffer_
         std::function<void()> on_closed_cb_; // if the user set the callback, we will call it when the connection is closed
         std::function<void(const std::string &)> on_error_cb_; // if the user set the callback, we will call it when an error occurs, and pass the error message
+        std::function<void(uint32_t)> on_recv_three_dup_ack;
 
         // utils
 
@@ -234,6 +230,8 @@ namespace myu {
         void set_on_closed(std::function<void()> callback);
 
         void set_on_error(std::function<void(const std::string &)> callback);
+
+        void set_on_recv_three_dup_ack(std::function<void(uint32_t ack_num)> callback);
 
         // state utils
         TcpState get_state() const;
