@@ -27,6 +27,5 @@ namespace myu {
         uint32_t recv_next_; // the smallest seq number that has not been received
         uint32_t recv_window_size_; // the size of the receiving window
         uint32_t initial_recv_seq_; // the rand initial sequence number for receiving
-
     };
 }

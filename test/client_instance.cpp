@@ -20,19 +20,18 @@ int main() {
     // we can just delay the close of the session to avoid the session close at SYN_SENT state to close immediately.
     // then uncomment the code below
 
-    // uv_timer_t delay_req;
-    // uv_timer_init(client->loop_, &delay_req);
-    // delay_req.data = session;
-    //
-    // uv_timer_start(&delay_req, [](uv_timer_t* handle) {
-    //     auto* s = static_cast<myu::TcpSession*>(handle->data);
-    //     spdlog::info("Delay finished, now closing session...");
-    //     s->close();
-    //
-    //     uv_timer_stop(handle);
-    // }, 10000, 0);
+    uv_timer_t delay_req;
+    uv_timer_init(client->loop_, &delay_req);
+    delay_req.data = session;
 
-    session->close();
+    uv_timer_start(&delay_req, [](uv_timer_t* handle) {
+        auto* s = static_cast<myu::TcpSession*>(handle->data);
+        spdlog::info("Delay finished, now closing session...");
+        s->close();
+
+        uv_timer_stop(handle);
+    }, 10000, 0);
+
 
     client->run();
 }

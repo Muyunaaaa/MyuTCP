@@ -11,6 +11,16 @@
 
 // TCP Control Block
 namespace myu {
+    constexpr  uint32_t INITIAL_RTO = 1000;
+    constexpr  uint32_t RTO_MIN = 200;
+    constexpr  uint32_t RTO_MAX = 60000;
+    constexpr uint32_t INITIAL_SSTHRESH = 8;
+
+    // // Session 初始化
+    // srtt = 0;              // 标志位：尚未获得测量值
+    // rttvar = 500;          // 初始抖动建议设为 RTO/2
+    // current_rto = INITIAL_RTO;
+
     enum TcpState {
         CLOSED,
         LISTEN,
@@ -89,6 +99,15 @@ namespace myu {
 
         myu::send_window send_window_;
         myu::recv_window recv_window_;
+
+        // when we receive the first callback, we calculate the time cost to initialize the rtt
+        bool is_rrt_initialized_ = false;
+        uint32_t rtt_ = INITIAL_RTO / 2;
+
+        uint32_t ssthresh_ = 8;
+        uint32_t current_rto_ = INITIAL_RTO;
+        uint32_t last_ack_received_;
+        int dup_ack_count_ = 0;         // to record the times of receiving the same ack
 
         myu::RingQueue<uint8_t, 1024> send_buffer_;
         myu::RingQueue<uint8_t, 1024> recv_buffer_;
@@ -259,7 +278,7 @@ namespace myu {
         // urgent
         void handle_reset(); // only handle RST packet
 
-        uint64_t get_timeout_ms() const { return timeout_ms_; }
+        uint64_t get_timeout_ms() const { return current_rto_; }
 
         // ip-port utils
         std::string get_listener_ip() const { return listener_ip_; }

@@ -18,12 +18,12 @@ myu::TcpSession::TcpSession(uv_loop_t *loop, UdpDriver *udp_driver):
     send_window_ = {
         .send_unack_ = 0,
         .send_next_ = 0,
-        .send_window_size_ = 1024,
+        .send_window_size_ = 1,
         .initial_send_seq_ = dis(gen)
     };
     recv_window_ = {
         .recv_next_ = 0,
-        .recv_window_size_ = 1024,
+        .recv_window_size_ = 1,
         .initial_recv_seq_ = dis(gen)
     };
     send_buffer_ = myu::RingQueue<uint8_t, 1024>();

@@ -29,8 +29,8 @@ add_executable(tcp_realization
         include/core/stack.h
         include/util/gen_iss.h
         include/util/parse_ip.h
-#        test/client_instance.cpp
-        test/server_instance.cpp
+        test/client_instance.cpp
+#        test/server_instance.cpp
 #        src/main.cpp
 )
 
