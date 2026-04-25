@@ -57,10 +57,12 @@ void TimerManager::drop_all_timers() {
 }
 
 void TimerManager::drop_timer_up_to(uint32_t ack_num) {
-    auto it_end = timers_.lower_bound(ack_num);
-    for (auto it = timers_.begin(); it != it_end; ++it) {
+    while (!timers_.empty()) {
+        auto it = timers_.begin();
+        if (it->first >= ack_num) {
+            break;
+        }
         uint32_t seq = it->first;
-
         drop_timer(seq);
     }
 }

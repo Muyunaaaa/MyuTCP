@@ -3,11 +3,8 @@
 #include "spdlog/sinks/stdout_color_sinks.h"
 
 int main() {
-    auto client_logger = spdlog::stdout_color_mt("client_logger");
-    client_logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [CLIENT] [%^%l%$] %v");
-
     auto *client = new myu::TcpStack("127.0.0.1", 9999);
-    client_logger->info("Client connecting to server...");
+    spdlog::info("Client connecting to server...");
 
     auto *session = client->create_session("127.0.0.1", 10000);
 
@@ -15,10 +12,6 @@ int main() {
 
     std::string message = "Hello, Server!";
     session->send(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(message.data()), message.size()));
-
-    // if we want to test the four handshake, or we want to test the message sending,
-    // we can just delay the close of the session to avoid the session close at SYN_SENT state to close immediately.
-    // then uncomment the code below
 
     uv_timer_t delay_req;
     uv_timer_init(client->loop_, &delay_req);

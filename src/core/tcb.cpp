@@ -133,14 +133,17 @@ bool myu::TcpSession::_handle_ack(const myu::myu_tcp_packet &packet) {
     if (ack_num > send_window_.send_unack_ && ack_num <= send_window_.send_next_) {
         // drop timer for the acked packet
         // the squ_num in the packet persent the first byte of the bytes the peer want to receive
-        timer_manager_.drop_timer_up_to(ack_num);
+        timer_manager_.drop_timer_up_to(ack_num - 1);
+
 
         // pop the acked data from send_buffer_
         uint32_t acked_bytes = ack_num - send_window_.send_unack_;
         send_buffer_.pop_front(acked_bytes);
 
+
         // update send_window_
         send_window_.send_unack_ = ack_num;
+
 
         // erase the all acked packets in inflight_packets_
         for (auto it = inflight_packets_.begin(); it != inflight_packets_.end();) {
@@ -151,6 +154,7 @@ bool myu::TcpSession::_handle_ack(const myu::myu_tcp_packet &packet) {
             }
         }
 
+
         // if we receive a ack ahead of the ack we received last, we ignore it
         if (last_ack_received_ < ack_num) {
             last_ack_received_ = ack_num;
@@ -160,6 +164,7 @@ bool myu::TcpSession::_handle_ack(const myu::myu_tcp_packet &packet) {
         } else {
             spdlog::warn("Received a ack ahead of the ack we received last, we ignore it");
         }
+
 
         // if we receive 3 duplicate ACKs, it means that the packet with seq number ack_num is lost,
         // we need to retransmit it immediately without waiting for the timer to timeout
@@ -194,7 +199,6 @@ bool myu::TcpSession::_handle_ack(const myu::myu_tcp_packet &packet) {
 
         _handle_try_send();
 
-        spdlog::info("Received ACK for seq {}, updated send_unack to {}", ack_num, send_window_.send_unack_);
         return true;
     }
     return false;
@@ -423,31 +427,15 @@ void myu::TcpSession::_handle_try_send() {
         state_ == TcpState::SYN_SENT
     )
         return;
-    size_t usable_window_size = get_usable_send_window_size();
-    size_t usable_peer_recv_window_size = get_peer_usable_recv_window_size();
-    uint32_t effective_window_size = std::min(usable_window_size, usable_peer_recv_window_size);
+
     uint32_t inflight = send_window_.send_next_ - send_window_.send_unack_;
-    uint32_t allowance = effective_window_size - inflight;
+    uint32_t allowance = send_window_.send_window_size_ - inflight;
 
-    while (allowance > 0 && !send_buffer_.empty()) {
-        size_t mss = 1460;
-        size_t unsent_in_buffer = send_buffer_.size() - inflight;
-        size_t can_send = std::min({(size_t) allowance, (size_t) mss, unsent_in_buffer});
-
-        if (can_send == 0) break;
-
-        // peek size(= can_send) data from the data has not been sent
-        std::vector<uint8_t> data = send_buffer_.peek_range(inflight, can_send);
-
-        std::string debug_str(data.begin(), data.end());
-
-        spdlog::info("Peek offset: {}, len: {}, content: '{}'",
-                     inflight, data.size(), debug_str);
-
+    if (allowance == 0) {
+        return;
+    } else {
+        std::vector<uint8_t> data = send_buffer_.peek_range(inflight, allowance);
         _send_payload_packet(data, FLAG_ACK);
-
-        allowance -= data.size();
-        inflight += data.size();
     }
 }
 
@@ -758,7 +746,6 @@ void myu::TcpSession::handle_fin_wait_1(const myu::myu_tcp_packet &packet) {
     }
     if (packet.header.flags & FLAG_FIN) {
         recv_window_.recv_next_ = peer_seq + 1;
-        spdlog::info("Send a pure ACK packet to {}:{}", get_remote_ip(), get_remote_port());
         _send_pure_ack(recv_window_.recv_next_);
         _transition_to(TcpState::CLOSE_WAIT);
     }
@@ -768,7 +755,6 @@ void myu::TcpSession::handle_fin_wait_2(const myu::myu_tcp_packet &packet) {
     if (packet.header.flags & FLAG_FIN) {
         uint32_t peer_seq = ntohl(packet.header.seq_num);
         recv_window_.recv_next_ = peer_seq + 1;
-        spdlog::info("Send a pure ACK packet to {}:{}", get_remote_ip(), get_remote_port());
         _send_pure_ack(recv_window_.recv_next_);
         _transition_to(TcpState::TIME_WAIT);
         this->_start_2msl_timer();
@@ -899,8 +885,7 @@ void myu::TcpSession::handle_established(const myu::myu_tcp_packet &packet) {
 }
 
 void myu::TcpSession::_start_2msl_timer() {
-    // const uint64_t TWO_MSL_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes in milliseconds
-    constexpr uint64_t TWO_MSL_TIMEOUT_MS = 2 * 1000; // TODO: set it to 2 minutes in the future
+    const uint64_t TWO_MSL_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes in milliseconds
     if (!timer_manager_._2msl_timer) {
         timer_manager_._2msl_timer = std::make_unique<uv_timer_t>();
         uv_timer_init(timer_manager_.loop_, timer_manager_._2msl_timer.get());
