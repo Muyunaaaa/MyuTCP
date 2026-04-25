@@ -33,6 +33,8 @@ Add the following to your `CMakeLists.txt`:
 ```cmake
 add_subdirectory(extern/MyuTCP)
 
+add_executable(your_target main.cpp)
+
 target_link_libraries(your_target PRIVATE myutcp)
 ```
 
