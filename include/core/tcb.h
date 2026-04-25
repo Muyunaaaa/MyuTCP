@@ -93,17 +93,9 @@ namespace myu {
     private:
         TcpState state_ = TcpState::CLOSED;
 
-        myu::send_window send_window_;
-        myu::recv_window recv_window_;
-
-        // when we receive the first callback, we calculate the time cost to initialize the rtt
-        bool is_rrt_initialized_ = false;
-        uint32_t rtt_ = INITIAL_RTO / 2;
-
-        uint32_t ssthresh_ = 8;
-        uint32_t current_rto_ = INITIAL_RTO;
-        uint32_t last_ack_received_;
-        int dup_ack_count_ = 0; // to record the times of receiving the same ack
+        using rtt_time = std::chrono::steady_clock::time_point;
+        rtt_time time_collect_rtt_start_;
+        rtt_time time_collect_rtt_end_;
 
         myu::RingQueue<uint8_t, 1024> send_buffer_;
         myu::RingQueue<uint8_t, 1024> recv_buffer_;
@@ -111,7 +103,6 @@ namespace myu {
         std::map<uint32_t, myu_tcp_packet> inflight_packets_;
         // store the inflight packets and release them if receive their ack
 
-        TimerManager timer_manager_;
         UdpDriver *udp_driver_;
 
         std::string listener_ip_;
@@ -197,6 +188,15 @@ namespace myu {
         bool is_in_ready_queue_ = false;
 
     public:
+        TimerManager timer_manager_;
+        myu::send_window send_window_;
+        myu::recv_window recv_window_;
+
+        uint32_t ssthresh_ = 8;
+        uint32_t current_rto_ = INITIAL_RTO;
+        uint32_t last_ack_received_;
+        int dup_ack_count_ = 0; // to record the times of receiving the same ack
+
         // when the server is at CLOSE_WAIT and the buffer is empty, if this flag is true, we will close the connection immediately
         bool auto_close_on_eof = true;
 

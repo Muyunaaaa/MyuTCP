@@ -14,9 +14,6 @@ public:
         _2msl_timer = std::make_unique<uv_timer_t>();
         uv_timer_init(loop_, _2msl_timer.get());
         _2msl_timer->data = nullptr;
-        global_timer = std::make_unique<uv_timer_t>();
-        uv_timer_init(loop_, global_timer.get());
-        global_timer->data = nullptr;
     }
 
     TimerManager(const TimerManager &) = delete;
@@ -38,13 +35,12 @@ public:
     // drop timer
     void drop_timer(uint32_t seq_num);
 
+    void drop_timer_up_to(uint32_t ack_num);
+
     // drop all timers
     void drop_all_timers();
 
     std::unique_ptr<uv_timer_t> _2msl_timer;
     uv_loop_t *loop_;
 
-    // this timer is used to control congestion,
-    // one rrt it will execute the logic of congestion control.
-    std::unique_ptr<uv_timer_t> global_timer;
 };

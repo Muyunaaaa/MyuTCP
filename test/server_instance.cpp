@@ -12,13 +12,17 @@ int main() {
 
     server->listen();
 
-    server->set_app_logic([](myu::TcpSession *s) {
+    std::string global_buffer;
+    server->set_app_logic([&global_buffer](myu::TcpSession *s) {
         auto data = s->read_all();
+        std::string chunk(data.begin(), data.end());
+        global_buffer += chunk;
         uint32_t n = data.size();
         if (n > 0) {
             spdlog::info("Received {} bytes from {}:{}", n, s->get_remote_ip(), s->get_remote_port());
             std::string msg(data.begin(), data.begin() + n);
             spdlog::info("Message: {}", msg);
+            spdlog::info("The entire massage : {}", global_buffer);
         } else if (s->get_state() == myu::TcpState::CLOSE_WAIT) {
             spdlog::info("Client disconnected.");
         }

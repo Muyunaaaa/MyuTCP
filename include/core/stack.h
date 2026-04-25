@@ -12,18 +12,18 @@ namespace myu {
     private:
         std::map<std::pair<std::string, uint16_t>, std::unique_ptr<TcpSession> > tcp_sessions_;
         // idle handle for checking the ready queue and call the app logic callback function
-        uv_idle_t* idle_handle_;
+        uv_idle_t *idle_handle_;
         // the ready queue for sessions, when the session is ready to be processed,
         // we put it into this queue, and the idle handle will check this queue and call the app logic callback function
-        std::vector<TcpSession*> ready_queue_;
+        std::vector<TcpSession *> ready_queue_;
 
-        using AppLogicCb = std::function<void(TcpSession*)>;
+        using AppLogicCb = std::function<void(TcpSession *)>;
         AppLogicCb app_logic_cb_;
 
         // the session will call this function to push session in the ready queue and start the idle handle to process the ready queue
-        void enqueue_ready_session(TcpSession* s) {
+        void enqueue_ready_session(TcpSession *s) {
             ready_queue_.push_back(s);
-            if (!uv_is_active((uv_handle_t*)idle_handle_)) {
+            if (!uv_is_active((uv_handle_t *) idle_handle_)) {
                 uv_idle_start(idle_handle_, _on_idle_dispatch);
             }
         }
@@ -82,7 +82,7 @@ namespace myu {
 
             // session notify the stack to add this session into the ready queue when the session is ready to be processed,
             // and the stack will call the app logic callback function to process this session
-            new_session->set_notify_cb([this](TcpSession* session_ptr) {
+            new_session->set_notify_cb([this](TcpSession *session_ptr) {
                 this->enqueue_ready_session(session_ptr);
             });
 
@@ -103,10 +103,10 @@ namespace myu {
             // get the remote addr
             udp_driver_->set_on_receive([&](const myu::myu_tcp_packet &packet, const sockaddr_in &addr) {
                 spdlog::info("Received packet from {}:{}, flag: {}",
-                    _get_ip_str(addr),
-                    ntohs(addr.sin_port),
-                    parse_flags_to_string(packet.header.flags)
-                    );
+                             _get_ip_str(addr),
+                             ntohs(addr.sin_port),
+                             parse_flags_to_string(packet.header.flags)
+                );
                 std::string remote_ip = _get_ip_str(addr);
                 uint16_t remote_port = ntohs(addr.sin_port);
 
@@ -172,17 +172,17 @@ namespace myu {
 
         void set_app_logic(AppLogicCb cb) { app_logic_cb_ = std::move(cb); }
 
-        static void _on_idle_dispatch(uv_idle_t* handle) {
-            auto* self = static_cast<TcpStack*>(handle->data);
+        static void _on_idle_dispatch(uv_idle_t *handle) {
+            auto *self = static_cast<TcpStack *>(handle->data);
 
             uv_idle_stop(handle);
 
             if (self->ready_queue_.empty()) return;
 
-            std::vector<TcpSession*> processing_batch;
+            std::vector<TcpSession *> processing_batch;
             processing_batch.swap(self->ready_queue_);
 
-            for (TcpSession* s : processing_batch) {
+            for (TcpSession *s: processing_batch) {
                 s->set_in_ready_queue(false);
 
                 if (self->app_logic_cb_) {

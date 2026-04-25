@@ -56,6 +56,15 @@ void TimerManager::drop_all_timers() {
     }
 }
 
+void TimerManager::drop_timer_up_to(uint32_t ack_num) {
+    auto it_end = timers_.lower_bound(ack_num);
+    for (auto it = timers_.begin(); it != it_end; ++it) {
+        uint32_t seq = it->first;
+
+        drop_timer(seq);
+    }
+}
+
 // ack number, it means the packet to be sent, so its timer may has been started but not timeout yet
 // if seq = ack_num, we may stop the timer we should not stop, so we just stop the timer whose seq < ack_num
 void TimerManager::stop_timers_up_to(uint32_t ack_num) {

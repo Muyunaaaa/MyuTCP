@@ -5,12 +5,11 @@
 #include "spdlog/spdlog.h"
 #include "util/gen_iss.h"
 
-myu::TcpSession::TcpSession(uv_loop_t *loop, UdpDriver *udp_driver):
-    timer_manager_(loop),
-    udp_driver_(udp_driver),
-    loop_(loop),
-    listener_ip_("0.0.0.0"),
-    remote_ip_("127.0.0.1"){
+myu::TcpSession::TcpSession(uv_loop_t *loop, UdpDriver *udp_driver) : timer_manager_(loop),
+                                                                      udp_driver_(udp_driver),
+                                                                      loop_(loop),
+                                                                      listener_ip_("0.0.0.0"),
+                                                                      remote_ip_("127.0.0.1") {
     state_ = TcpState::CLOSED;
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -29,7 +28,7 @@ myu::TcpSession::TcpSession(uv_loop_t *loop, UdpDriver *udp_driver):
     send_buffer_ = myu::RingQueue<uint8_t, 1024>();
     recv_buffer_ = myu::RingQueue<uint8_t, 1024>();
     ooo_map_ = std::map<uint32_t, std::vector<uint8_t> >();
-    inflight_packets_ = std::map<uint32_t, myu_tcp_packet >();
+    inflight_packets_ = std::map<uint32_t, myu_tcp_packet>();
     peer_usable_window_size_ = 0;
     last_ack_received_ = send_window_.initial_send_seq_;
 }
@@ -91,7 +90,8 @@ void myu::TcpSession::set_on_recv_three_dup_ack(std::function<void(uint32_t ack_
                 const myu_tcp_packet &packet = it->second;
                 // this function will start the timer automatically
                 _send_payload_packet(packet.payload, packet.header.flags);
-                spdlog::info("Received three duplicate ACKs for seq {}, fast retransmit packet with seq {}", ack_num, ntohl(packet.header.seq_num));
+                spdlog::info("Received three duplicate ACKs for seq {}, fast retransmit packet with seq {}", ack_num,
+                             ntohl(packet.header.seq_num));
             }
         };
     }
@@ -128,13 +128,12 @@ void myu::TcpSession::_transition_to(TcpState new_state) {
 
 bool myu::TcpSession::_handle_ack(const myu::myu_tcp_packet &packet) {
     uint32_t ack_num = ntohl(packet.header.ack_num);
-    uint32_t peer_window = ntohs(packet.header.window_size);
     // ack value means that the seq_num would accept next time
     // check if the ack number is valid, it should be in the range of (send_unack_, send_next_]
     if (ack_num > send_window_.send_unack_ && ack_num <= send_window_.send_next_) {
-        // stop timer for the acked packet
+        // drop timer for the acked packet
         // the squ_num in the packet persent the first byte of the bytes the peer want to receive
-        timer_manager_.stop_timers_up_to(ack_num);
+        timer_manager_.drop_timer_up_to(ack_num);
 
         // pop the acked data from send_buffer_
         uint32_t acked_bytes = ack_num - send_window_.send_unack_;
@@ -164,20 +163,41 @@ bool myu::TcpSession::_handle_ack(const myu::myu_tcp_packet &packet) {
 
         // if we receive 3 duplicate ACKs, it means that the packet with seq number ack_num is lost,
         // we need to retransmit it immediately without waiting for the timer to timeout
-        // todo: we need to adjust the window size
         if (dup_ack_count_ == 3) {
             on_recv_three_dup_ack(ack_num);
+            uint32_t swz = send_window_.send_window_size_;
+            ssthresh_ = swz / 2;
+            send_window_.send_window_size_ = swz / 2 + 3;
+            spdlog::info("Received 3 dup ack, we adjust the send window size {} to {}", swz,
+                         send_window_.send_window_size_);
             dup_ack_count_ = 0;
+        }
+
+
+        uint32_t swz = send_window_.send_window_size_;
+        if (swz < ssthresh_) {
+            send_window_.send_window_size_ = swz * 2;
+            spdlog::info("After one rtt and the cwnd is under ssthresh = {} , we adjust the cwnd from {} to {}",
+                        ssthresh_,
+                         swz,
+                        send_window_.send_window_size_
+            );
+        } else {
+            send_window_.send_window_size_ = swz + 1;
+            spdlog::info(
+                "After one rtt and the cwnd is more than ssthresh = {}, we adjust the cwnd from {} to {}",
+                ssthresh_,
+                swz,
+                send_window_.send_window_size_
+            );
         }
 
         _handle_try_send();
 
         spdlog::info("Received ACK for seq {}, updated send_unack to {}", ack_num, send_window_.send_unack_);
         return true;
-    } else {
-        spdlog::warn("Received invalid ACK for seq {}, current send_unack is {}", ack_num, send_window_.send_unack_);
-        return false;
     }
+    return false;
 }
 
 bool myu::TcpSession::_handle_incoming_packet(const myu::myu_tcp_packet &packet) {
@@ -303,6 +323,7 @@ void myu::TcpSession::_send_control_packet(uint8_t flags) {
 }
 
 void myu::TcpSession::_send_payload_packet(const std::vector<uint8_t> &payload, uint8_t flags) {
+    if (payload.empty()) return;
     myu_tcp_packet packet;
 
     packet.header.s_port = htons(listener_port_);
@@ -334,9 +355,13 @@ void myu::TcpSession::_send_payload_packet(const std::vector<uint8_t> &payload, 
     send_window_.send_next_ += payload_len;
 
     _calculate_checksum(*packet_ptr);
-    udp_driver_->send_packet(packet_ptr, dest);
 
-    spdlog::info("Sent Data: seq = {}, len = {}", ntohl(packet.header.seq_num), payload_len);
+    spdlog::info("Sent Data: seq = {}, len = {}, content = {}",
+        ntohl(packet.header.seq_num),
+        payload_len,
+        std::string(packet_ptr->payload.begin(), packet_ptr->payload.end())
+    );
+    udp_driver_->send_packet(packet_ptr, dest);
 }
 
 bool myu::TcpSession::_handle_retransmit(std::shared_ptr<myu_tcp_packet> packet, uint32_t retransmit_count,
@@ -352,6 +377,18 @@ bool myu::TcpSession::_handle_retransmit(std::shared_ptr<myu_tcp_packet> packet,
         // we can consider the connection is broken and close it, or we can just give up this packet and move on, here we just give up this packet and move on
         return false;
     }
+
+    uint32_t cwnd = send_window_.send_window_size_;
+    uint32_t _ssthresh = ssthresh_;
+    ssthresh_ = cwnd / 2;
+    send_window_.send_window_size_ = 1;
+    spdlog::info("Packet Lost! We reset the cwnd from {} to {}, ssthresh from {} to {}" ,
+        cwnd,
+        send_window_.send_window_size_,
+        _ssthresh,
+        ssthresh_
+        );
+
     uint64_t next_timeout_ = next_timeout_ms * (1 << retransmit_count);
     spdlog::debug("this packet has been retransmit {} times, then the timeout_ms is {}", retransmit_count,
                   next_timeout_);
@@ -386,10 +423,6 @@ void myu::TcpSession::_handle_try_send() {
     size_t usable_peer_recv_window_size = get_peer_usable_recv_window_size();
     uint32_t effective_window_size = std::min(usable_window_size, usable_peer_recv_window_size);
     uint32_t inflight = send_window_.send_next_ - send_window_.send_unack_;
-    if (effective_window_size <= inflight && state_ == TcpState::ESTABLISHED) {
-        spdlog::warn("the size of inflight data more than the effective size");
-        return;
-    }
     uint32_t allowance = effective_window_size - inflight;
 
     while (allowance > 0 && !send_buffer_.empty()) {
@@ -401,6 +434,11 @@ void myu::TcpSession::_handle_try_send() {
 
         // peek size(= can_send) data from the data has not been sent
         std::vector<uint8_t> data = send_buffer_.peek_range(inflight, can_send);
+
+        std::string debug_str(data.begin(), data.end());
+
+        spdlog::info("Peek offset: {}, len: {}, content: '{}'",
+                     inflight, data.size(), debug_str);
 
         _send_payload_packet(data, FLAG_ACK);
 
@@ -607,7 +645,12 @@ void myu::TcpSession::connect() {
     _transition_to(TcpState::SYN_SENT);
 
     udp_driver_->set_on_receive([&](const myu::myu_tcp_packet &packet, const sockaddr_in &addr) {
-        spdlog::info("Received packet from {}:{}, flag {}", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port), parse_flags_to_string(packet.header.flags));
+        spdlog::info("Received packet from {}:{}, flag {}, content = {}",
+            inet_ntoa(addr.sin_addr),
+            ntohs(addr.sin_port),
+            parse_flags_to_string(packet.header.flags),
+            std::string(packet.payload.begin(), packet.payload.end())
+            );
         this->input(packet);
     });
 
@@ -616,7 +659,7 @@ void myu::TcpSession::connect() {
     send_window_.send_next_ = iss;
     send_window_.send_unack_ = iss;
 
-    // todo: we need a timer to record the rtt.
+    time_collect_rtt_start_ = std::chrono::steady_clock::now();
 
     spdlog::info("Send a SYN packet to {}:{}", get_remote_ip(), get_remote_port());
     _send_control_packet(FLAG_SYN);
@@ -626,7 +669,12 @@ void myu::TcpSession::connect() {
 
 void myu::TcpSession::close() {
     if (get_state() == ESTABLISHED) {
-        // todo: to be sure that the send buffer is empty
+        _handle_try_send();
+        if (!send_buffer_.empty()) {
+            spdlog::warn("There are still {} bytes data in send buffer, but user want to close the connection, we will discard these data and close the connection",
+                         send_buffer_.size());
+        }
+        timer_manager_.stop_all_timers();
         _transition_to(TcpState::FIN_WAIT_1);
         spdlog::info("Send a FIN packet to {}:{}", get_remote_ip(), get_remote_port());
         _send_control_packet(FLAG_FIN);
@@ -642,13 +690,12 @@ void myu::TcpSession::close() {
         _send_control_packet(FLAG_RST);
         this->timer_manager_.stop_all_timers();
         _transition_to(TcpState::CLOSED);
-    } else if (get_state() == SYN_RECEIVED){
+    } else if (get_state() == SYN_RECEIVED) {
         // if we are in SYN_RECEIVED state, it means that we have received a SYN packet from the peer, but we have not received the ACK packet from the peer,
         // but we want to give up this connection, so we just transition to CLOSED state directly
         _send_control_packet(FLAG_RST);
         this->timer_manager_.stop_all_timers();
         _transition_to(TcpState::CLOSED);
-
     } else {
         spdlog::warn("Received close request in unexpected state {}, ignore it.", state_to_string(get_state()));
     }
@@ -674,12 +721,16 @@ void myu::TcpSession::handle_syn_sent(const myu::myu_tcp_packet &packet) {
                          ack_num, expected_ack);
             return;
         }
+
+
         recv_window_.recv_next_ = seq_num + 1;
         send_window_.send_unack_ = ack_num;
         timer_manager_.stop_timer(expected_ack - 1);
         _send_pure_ack(recv_window_.recv_next_);
         _transition_to(ESTABLISHED);
-        if (on_established_cb_) { on_established_cb_(); }
+        if (on_established_cb_) {
+            on_established_cb_();
+        }
         _handle_try_send();
     } else if (packet.header.flags & FLAG_SYN) {
         // it means that the peer also send a SYN packet to us
@@ -743,7 +794,7 @@ void myu::TcpSession::handle_listen(const myu::myu_tcp_packet &packet) {
 
     recv_window_.recv_next_ = client_isn + 1;
 
-    // todo: we need a timer to record the rtt.
+    time_collect_rtt_start_ = std::chrono::steady_clock::now();
 
     // bind the remote addr
     set_remote_addr(get_remote_ip().c_str(), get_remote_port());
@@ -766,6 +817,8 @@ void myu::TcpSession::handle_syn_received(const myu::myu_tcp_packet &packet) {
     send_window_.send_unack_ = incoming_ack;
     timer_manager_.stop_timer(incoming_ack - 1);
 
+    time_collect_rtt_end_ = std::chrono::steady_clock::now();
+
     _transition_to(TcpState::ESTABLISHED);
     if (on_established_cb_) { on_established_cb_(); }
     _handle_try_send();
@@ -785,6 +838,7 @@ void myu::TcpSession::handle_close_wait(const myu::myu_tcp_packet &packet) {
         spdlog::warn("The data in flight has not been acknowledged, so the connection cannot be closed immediately");
     }
     if (user_want_to_close_ && send_buffer_.empty() && send_window_.send_unack_ == send_window_.send_next_) {
+        timer_manager_.stop_all_timers();
         spdlog::info("Send a FIN packet to {}:{}", get_remote_ip(), get_remote_port());
         _send_control_packet(FLAG_FIN);
         send_window_.send_next_++;
@@ -804,7 +858,7 @@ void myu::TcpSession::handle_last_ack(const myu::myu_tcp_packet &packet) {
     timer_manager_.stop_timer(incoming_ack - 1);
 
     _transition_to(TcpState::CLOSED);
-    if (on_closed_cb_) {on_closed_cb_();}
+    if (on_closed_cb_) { on_closed_cb_(); }
 }
 
 void myu::TcpSession::handle_reset() {
@@ -835,7 +889,8 @@ void myu::TcpSession::handle_established(const myu::myu_tcp_packet &packet) {
         spdlog::info("Send a pure ACK packet to {}:{}", get_remote_ip(), get_remote_port());
         _send_pure_ack(recv_window_.recv_next_);
         _transition_to(TcpState::CLOSE_WAIT);
-        if (on_data_cb_) { on_data_cb_(0); } // notify the application that the connection is closed by peer, and there is no more data to read
+        if (on_data_cb_) { on_data_cb_(0); }
+        // notify the application that the connection is closed by peer, and there is no more data to read
     }
 }
 
