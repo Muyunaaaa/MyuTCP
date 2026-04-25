@@ -380,7 +380,11 @@ bool myu::TcpSession::_handle_retransmit(std::shared_ptr<myu_tcp_packet> packet,
 
     uint32_t cwnd = send_window_.send_window_size_;
     uint32_t _ssthresh = ssthresh_;
-    ssthresh_ = cwnd / 2;
+    if (cwnd % 2) {
+        ssthresh_ = cwnd / 2;
+    }else {
+        ssthresh_ = (cwnd + 1) / 2;
+    }
     send_window_.send_window_size_ = 1;
     spdlog::info("Packet Lost! We reset the cwnd from {} to {}, ssthresh from {} to {}" ,
         cwnd,
@@ -560,7 +564,7 @@ size_t myu::TcpSession::recv(std::span<uint8_t> buf) {
     return 0;
 }
 
-std::span<uint8_t> myu::TcpSession::read_all() {
+std::vector<uint8_t> myu::TcpSession::read_all() {
     size_t to_read = recv_buffer_.size();
     std::vector<uint8_t> data(to_read);
     for (size_t i = 0; i < to_read; ++i) {
@@ -575,7 +579,7 @@ std::span<uint8_t> myu::TcpSession::read_all() {
         }
     }
 
-    return std::span<uint8_t>(data.data(), data.size());
+    return data;
 }
 
 void myu::TcpSession::input(const myu::myu_tcp_packet &packet) {

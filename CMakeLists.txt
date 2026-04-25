@@ -12,6 +12,14 @@ add_subdirectory(vendors/spdlog)
 #add_subdirectory(vendors/raylib)
 #add_subdirectory(vendors/sfml)
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(STATUS "Clang detected, configuring AddressSanitizer...")
+#    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+#
+#    add_compile_options(-ftrivial-auto-var-init=pattern)
+endif()
+
+
 if(MINGW)
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition")
 endif()
@@ -29,8 +37,8 @@ add_executable(tcp_realization
         include/core/stack.h
         include/util/gen_iss.h
         include/util/parse_ip.h
-        test/client_instance.cpp
-#        test/server_instance.cpp
+#        test/client_instance.cpp
+        test/server_instance.cpp
 #        src/main.cpp
 )
 
@@ -46,3 +54,4 @@ target_link_libraries(tcp_realization PRIVATE
 #        SFML::Graphics
 #        raylib
 )
+

@@ -228,7 +228,7 @@ namespace myu {
 
         size_t recv(std::span<uint8_t> buf);
 
-        std::span<uint8_t> read_all();
+        std::vector<uint8_t> read_all();
 
         size_t available() const; // return the size of data that can be read from recv_buffer_
 
