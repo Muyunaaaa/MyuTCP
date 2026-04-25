@@ -1,31 +1,32 @@
 #include "UdpDriver.h"
 
 #include "spdlog/spdlog.h"
+#include "util/logger.h"
 #include "util/parse_ip.h"
 void UdpDriver::init(uv_loop_t* loop, const char* listen_ip, int listen_port) {
     int r;
     udp_handle_ = new uv_udp_t();
     r = uv_udp_init(loop, udp_handle_);
-    if (r < 0) spdlog::error("Init error: {}", uv_strerror(r));
+    if (r < 0) MYU_LOG_ERROR("Init error: {}", uv_strerror(r));
 
     udp_handle_->data = this;
     struct sockaddr_in listen_addr;
     uv_ip4_addr(listen_ip, listen_port, &listen_addr);
 
     r = uv_udp_bind(udp_handle_, (const struct sockaddr *)&listen_addr, UV_UDP_REUSEADDR);
-    if (r < 0) spdlog::error("Bind error: {}", uv_strerror(r));
+    if (r < 0) MYU_LOG_ERROR("Bind error: {}", uv_strerror(r));
 
     r = uv_udp_recv_start(udp_handle_, on_uv_alloc, on_uv_recv);
-    if (r < 0) spdlog::error("Recv start error: {}", uv_strerror(r));
+    if (r < 0) MYU_LOG_ERROR("Recv start error: {}", uv_strerror(r));
 
-    spdlog::info("TDP Driver started on {}:{}", listen_ip, listen_port);
+    MYU_LOG_INFO("TDP Driver started on {}:{}", listen_ip, listen_port);
 
 }
 
 void UdpDriver::send_packet(std::shared_ptr<myu::myu_tcp_packet> packet, const sockaddr_in &dest_addr) {
     // simulate packet loss
     if ((static_cast<float>(rand()) / RAND_MAX) < loss_rate_) {
-        spdlog::warn("Packet seq={} LOST (Simulated)", packet.get()->header.seq_num);
+        MYU_LOG_WARN("Packet seq={} LOST (Simulated)", packet.get()->header.seq_num);
         return;
     }
 
@@ -58,13 +59,13 @@ void UdpDriver::send_packet(std::shared_ptr<myu::myu_tcp_packet> packet, const s
                            [](uv_udp_send_t* req, int status) {
             SendCtx* sc = static_cast<SendCtx*>(req->data);
             if (status < 0) {
-                spdlog::error("UDP send async error: {}", uv_strerror(status));
+                MYU_LOG_ERROR("UDP send async error: {}", uv_strerror(status));
             }
             delete sc;
         });
 
     if (r < 0) {
-        spdlog::error("uv_udp_send immediate failed: {}", uv_strerror(r));
+        MYU_LOG_ERROR("uv_udp_send immediate failed: {}", uv_strerror(r));
         delete ctx;
     }
 }

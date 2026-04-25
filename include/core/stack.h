@@ -6,6 +6,7 @@
 #include "UdpDriver.h"
 #include "uv.h"
 #include "util/parse_ip.h"
+#include "util/logger.h"
 
 namespace myu {
     class TcpStack {
@@ -67,7 +68,7 @@ namespace myu {
                 // std::vector<uint8_t> buffer(available);
                 // size_t n = session_ptr->recv(buffer);
                 // // when the session recive the data, we just print the data to the console, in real application, user can do whatever they want with the data
-                // spdlog::info("Received data from {}:{}. Data size = {}, content = {}",
+                // MYU_LOG_INFO("Received data from {}:{}. Data size = {}, content = {}",
                 //              session_ptr->get_remote_ip(), session_ptr->get_remote_port(), n,
                 //              std::string(buffer.begin(), buffer.end()));
             });
@@ -75,7 +76,7 @@ namespace myu {
             // this function can be override by user, when the session is closed, the user can do some clean work in this callback function
             new_session->set_on_closed([this, remote_ip, remote_port]() {
                 // destroy and erase the session from tcp_sessions_ when the session is closed
-                spdlog::info("Stack: Removing session {}:{}", remote_ip, remote_port);
+                MYU_LOG_INFO("Stack: Removing session {}:{}", remote_ip, remote_port);
                 auto key = std::make_pair(remote_ip, remote_port);
                 this->tcp_sessions_.erase(key);
             });
@@ -89,7 +90,7 @@ namespace myu {
             // this will execute the default logic to retransmit imm
             new_session->set_on_recv_three_dup_ack(nullptr);
 
-            spdlog::info("Create a session, the remote's ip = {} and port = {}", new_session->get_remote_ip(),
+            MYU_LOG_INFO("Create a session, the remote's ip = {} and port = {}", new_session->get_remote_ip(),
                          new_session->get_remote_port());
 
             auto key = std::make_pair(remote_ip, remote_port);
@@ -102,7 +103,7 @@ namespace myu {
         void listen() {
             // get the remote addr
             udp_driver_->set_on_receive([&](const myu::myu_tcp_packet &packet, const sockaddr_in &addr) {
-                spdlog::info("Received packet from {}:{}, flag: {}",
+                MYU_LOG_INFO("Received packet from {}:{}, flag: {}",
                              _get_ip_str(addr),
                              ntohs(addr.sin_port),
                              parse_flags_to_string(packet.header.flags)
@@ -121,7 +122,7 @@ namespace myu {
                     // only the syn packet (not include other flag) would enter this branch
                     // if the packet is not syn packet, it means that some errors occurred.
                     if (packet.header.flags == FLAG_SYN) {
-                        spdlog::info("Received SYN packet from {}:{}. Create a new session for this connection.",
+                        MYU_LOG_INFO("Received SYN packet from {}:{}. Create a new session for this connection.",
                                      remote_ip, remote_port);
                         TcpSession *new_session = create_session(remote_ip, remote_port);
                         new_session->set_remote_addr(remote_ip.c_str(), remote_port);

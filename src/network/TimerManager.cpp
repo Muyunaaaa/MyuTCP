@@ -1,6 +1,5 @@
 #include "network/TimerManager.h"
-
-#include "spdlog/spdlog.h"
+#include "util/logger.h"
 
 
 void TimerManager::stop_timer(uint32_t seq_num) {
@@ -9,7 +8,7 @@ void TimerManager::stop_timer(uint32_t seq_num) {
         uv_timer_t *timer = it->second;
         // use uv close function
         uv_timer_stop(timer);
-        spdlog::info("stop timer whose seq = {} ", seq_num);
+        MYU_LOG_INFO("stop timer whose seq = {} ", seq_num);
     }
 }
 
@@ -30,7 +29,7 @@ void TimerManager::drop_timer(uint32_t seq_num) {
         });
 
         timers_.erase(it);
-        spdlog::info("drop timer whose seq = {} ", seq_num);
+        MYU_LOG_INFO("drop timer whose seq = {} ", seq_num);
     }
 }
 
@@ -52,7 +51,7 @@ void TimerManager::drop_all_timers() {
         });
 
         it = timers_.erase(it);
-        spdlog::info("drop timer whose seq = {} ", seq);
+        MYU_LOG_INFO("drop timer whose seq = {} ", seq);
     }
 }
 
@@ -79,7 +78,7 @@ void TimerManager::stop_timers_up_to(uint32_t ack_num) {
 
         uv_timer_stop(timer);
 
-        spdlog::info("stop timer whose seq = {} (ACKed by {})", seq, ack_num);
+        MYU_LOG_INFO("stop timer whose seq = {} (ACKed by {})", seq, ack_num);
     }
 }
 
@@ -104,7 +103,7 @@ void TimerManager::start_timer(uint32_t seq_num, uint64_t timeout_ms, std::funct
     timer->data = new std::function<void()>(std::move(wrapped_callback));
     uv_timer_start(timer, on_timer_uv_tick, timeout_ms, 0);
     timers_[seq_num] = timer;
-    spdlog::info("start timer whose seq = {} ", seq_num);
+    MYU_LOG_INFO("start timer whose seq = {} ", seq_num);
 }
 
 void TimerManager::stop_all_timers() {
@@ -115,7 +114,7 @@ void TimerManager::stop_all_timers() {
         uv_timer_stop(timer);
     }
     uv_timer_stop(_2msl_timer.get());
-    spdlog::debug("All timers stopped");
+    MYU_LOG_INFO("All timers stopped");
 }
 
 TimerManager::~TimerManager() {
@@ -131,5 +130,5 @@ TimerManager::~TimerManager() {
             delete t;
         });
     }
-    spdlog::warn("TimeManager destroyed, all timers cancelled.");
+    MYU_LOG_WARN("TimeManager destroyed, all timers cancelled.");
 }

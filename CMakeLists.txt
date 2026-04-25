@@ -1,27 +1,40 @@
-cmake_minimum_required(VERSION 4.1)
-project(tcp_realization)
-
-set(CMAKE_VERBOSE_MAKEFILE ON)
-
+cmake_minimum_required(VERSION 3.20)
+project(MyuTCP)
 set(CMAKE_CXX_STANDARD 23)
 
-set(SFML_SKIP_INSTALL ON CACHE BOOL "" FORCE)
+if(NOT TARGET uv_a)
+    add_subdirectory(vendors/libuv)
+endif()
+if(NOT TARGET spdlog)
+    add_subdirectory(vendors/spdlog)
+endif()
 
-add_subdirectory(vendors/libuv)
-add_subdirectory(vendors/spdlog)
-#add_subdirectory(vendors/raylib)
-#add_subdirectory(vendors/sfml)
-
-#if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-#    message(STATUS "Clang detected, configuring AddressSanitizer...")
-##    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
-##
-##    add_compile_options(-ftrivial-auto-var-init=pattern)
-#endif()
+option(MYU_ENABLE_DEBUG "Enable MyuTCP verbose debug logging" OFF)
 
 
-if(MINGW)
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition")
+add_library(myutcp STATIC
+        src/core/tcb.cpp
+        src/network/TimerManager.cpp
+        src/network/UdpDriver.cpp
+        include/util/logger.h
+)
+
+target_include_directories(myutcp PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/core>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/network>
+)
+
+target_link_libraries(myutcp PUBLIC
+        uv_a
+        spdlog
+)
+
+if(MYU_ENABLE_DEBUG)
+    message(STATUS ">> MyuTCP: Debug logging ENABLED")
+    target_compile_definitions(myutcp PUBLIC MYU_ENABLE_DEBUG)
+else()
+    message(STATUS ">> MyuTCP: Debug logging DISABLED")
 endif()
 
 add_executable(tcp_realization
@@ -30,28 +43,18 @@ add_executable(tcp_realization
         include/core/sw.h
         include/network/UdpDriver.h
         include/network/TimerManager.h
-        src/network/TimerManager.cpp
-        src/network/UdpDriver.cpp
         include/core/RingBuffer.h
         src/core/tcb.cpp
         include/core/stack.h
         include/util/gen_iss.h
         include/util/parse_ip.h
-        test/client_instance.cpp
-#        test/server_instance.cpp
-#        src/main.cpp
+        test/server_instance.cpp
 )
 
-target_include_directories(tcp_realization PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/core
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/network
-)
+target_link_libraries(tcp_realization PRIVATE myutcp)
 
-target_link_libraries(tcp_realization PRIVATE
-        uv_a
-        spdlog
-#        SFML::Graphics
-#        raylib
-)
+
+if(MINGW)
+    target_link_options(tcp_realization PRIVATE -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition)
+endif()
 
