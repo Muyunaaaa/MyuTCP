@@ -11,12 +11,12 @@
 
 // TCP Control Block
 namespace myu {
-    constexpr  uint32_t INITIAL_RTO = 1000;
-    constexpr  uint32_t RTO_MIN = 200;
-    constexpr  uint32_t RTO_MAX = 60000;
+    constexpr uint32_t INITIAL_RTO = 1000;
+    constexpr uint32_t RTO_MIN = 200;
+    constexpr uint32_t RTO_MAX = 60000;
     constexpr uint32_t INITIAL_SSTHRESH = 8;
 
-     enum TcpState {
+    enum TcpState {
         CLOSED,
         LISTEN,
         SYN_SENT,
@@ -88,7 +88,8 @@ namespace myu {
     }
 
     class TcpSession {
-        using NotifyStackCb = std::function<void(TcpSession*)>;
+        using NotifyStackCb = std::function<void(TcpSession *)>;
+
     private:
         TcpState state_ = TcpState::CLOSED;
 
@@ -102,23 +103,26 @@ namespace myu {
         uint32_t ssthresh_ = 8;
         uint32_t current_rto_ = INITIAL_RTO;
         uint32_t last_ack_received_;
-        int dup_ack_count_ = 0;         // to record the times of receiving the same ack
+        int dup_ack_count_ = 0; // to record the times of receiving the same ack
 
         myu::RingQueue<uint8_t, 1024> send_buffer_;
         myu::RingQueue<uint8_t, 1024> recv_buffer_;
         std::map<uint32_t, std::vector<uint8_t> > ooo_map_; // out-of-order packet map, key is the seq number
+        std::map<uint32_t, myu_tcp_packet> inflight_packets_;
+        // store the inflight packets and release them if receive their ack
 
         TimerManager timer_manager_;
-        UdpDriver* udp_driver_;
+        UdpDriver *udp_driver_;
 
         std::string listener_ip_;
         uint16_t listener_port_;
         std::string remote_ip_;
         uint16_t remote_port_;
 
-        uv_loop_t* loop_ = nullptr;
+        uv_loop_t *loop_ = nullptr;
 
-        bool user_want_to_close_ = false; // when the user call close function, we set this flag to true, and we will try to close the connection when the send buffer is empty
+        bool user_want_to_close_ = false;
+        // when the user call close function, we set this flag to true, and we will try to close the connection when the send buffer is empty
 
         uint32_t peer_usable_window_size_;
         // save the usable window size of peer, which is updated when receive packet, and used to calculate the usable window size for sending
@@ -138,10 +142,14 @@ namespace myu {
         void _start_2msl_timer();
 
         // callbacks function
-        std::function<void()> on_established_cb_; // if the user set the callback, we will call it when the connection is established
-        std::function<void(size_t)> on_data_cb_; // if the user set the callback, we will call it when receive data, and pass the size of data in the recv_buffer_
-        std::function<void()> on_closed_cb_; // if the user set the callback, we will call it when the connection is closed
-        std::function<void(const std::string &)> on_error_cb_; // if the user set the callback, we will call it when an error occurs, and pass the error message
+        std::function<void()> on_established_cb_;
+        // if the user set the callback, we will call it when the connection is established
+        std::function<void(size_t)> on_data_cb_;
+        // if the user set the callback, we will call it when receive data, and pass the size of data in the recv_buffer_
+        std::function<void()> on_closed_cb_;
+        // if the user set the callback, we will call it when the connection is closed
+        std::function<void(const std::string &)> on_error_cb_;
+        // if the user set the callback, we will call it when an error occurs, and pass the error message
         std::function<void(uint32_t)> on_recv_three_dup_ack;
 
         // utils
@@ -180,6 +188,7 @@ namespace myu {
 
         // other
         void _calculate_checksum(myu::myu_tcp_packet &packet);
+
         bool _verify_checksum(const myu::myu_tcp_packet &packet);
 
         // the function which notifies the stack that the session is ready to be processed.
@@ -203,7 +212,7 @@ namespace myu {
 
         void set_notify_cb(NotifyStackCb cb) { notify_stack_cb_ = std::move(cb); }
 
-        TcpSession(uv_loop_t* loop, UdpDriver *udp_driver);
+        TcpSession(uv_loop_t *loop, UdpDriver *udp_driver);
 
         // lifetime control
         void connect(); // three handshake
@@ -218,6 +227,7 @@ namespace myu {
         size_t send(std::span<const uint8_t> data);
 
         size_t recv(std::span<uint8_t> buf);
+
         std::span<uint8_t> read_all();
 
         size_t available() const; // return the size of data that can be read from recv_buffer_

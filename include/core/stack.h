@@ -86,6 +86,9 @@ namespace myu {
                 this->enqueue_ready_session(session_ptr);
             });
 
+            // this will execute the default logic to retransmit imm
+            new_session->set_on_recv_three_dup_ack(nullptr);
+
             spdlog::info("Create a session, the remote's ip = {} and port = {}", new_session->get_remote_ip(),
                          new_session->get_remote_port());
 

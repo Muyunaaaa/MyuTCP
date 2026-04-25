@@ -29,7 +29,7 @@ myu::TcpSession::TcpSession(uv_loop_t *loop, UdpDriver *udp_driver):
     send_buffer_ = myu::RingQueue<uint8_t, 1024>();
     recv_buffer_ = myu::RingQueue<uint8_t, 1024>();
     ooo_map_ = std::map<uint32_t, std::vector<uint8_t> >();
-
+    inflight_packets_ = std::map<uint32_t, myu_tcp_packet >();
     peer_usable_window_size_ = 0;
 }
 
@@ -85,8 +85,14 @@ void myu::TcpSession::set_on_recv_three_dup_ack(std::function<void(uint32_t ack_
         // if the user not set the callback, we provide a default callback function, which give a log when receive three duplicate ACKs
         on_recv_three_dup_ack = [this](uint32_t ack_num) {
             timer_manager_.stop_timer(ack_num);
-            // fixme: we need add a map to save the inflight packets because of we need record the entire packet.
-        }
+            auto it = inflight_packets_.find(ack_num);
+            if (it != inflight_packets_.end()) {
+                const myu_tcp_packet &packet = it->second;
+                // this function will start the timer automatically
+                _send_payload_packet(packet.payload, packet.header.flags);
+                spdlog::info("Received three duplicate ACKs for seq {}, fast retransmit packet with seq {}", ack_num, ntohl(packet.header.seq_num));
+            }
+        };
     }
 }
 
@@ -135,6 +141,32 @@ bool myu::TcpSession::_handle_ack(const myu::myu_tcp_packet &packet) {
 
         // update send_window_
         send_window_.send_unack_ = ack_num;
+
+        // erase the all acked packets in inflight_packets_
+        for (auto it = inflight_packets_.begin(); it != inflight_packets_.end();) {
+            if (it->first < ack_num) {
+                it = inflight_packets_.erase(it);
+            } else {
+                break;
+            }
+        }
+
+        // if we receive a ack ahead of the ack we received last, we ignore it
+        if (last_ack_received_ < ack_num) {
+            last_ack_received_ = ack_num;
+            dup_ack_count_ = 0;
+        } else if (last_ack_received_ == ack_num) {
+            dup_ack_count_++;
+        } else {
+            spdlog::warn("Received a ack ahead of the ack we received last, we ignore it");
+        }
+
+        // if we receive 3 duplicate ACKs, it means that the packet with seq number ack_num is lost,
+        // we need to retransmit it immediately without waiting for the timer to timeout
+        if (dup_ack_count_ == 3) {
+            on_recv_three_dup_ack(ack_num);
+            dup_ack_count_ = 0;
+        }
 
         // todo: we need to adjust the strategy for updating the window size, here we just set it as the size of the peer window can accept
         send_window_.send_window_size_ = peer_window;
@@ -291,6 +323,8 @@ void myu::TcpSession::_send_payload_packet(const std::vector<uint8_t> &payload, 
     sockaddr_in dest;
     uv_ip4_addr(get_remote_ip().c_str(), get_remote_port(), &dest);
 
+    inflight_packets_.try_emplace(packet.header.seq_num, packet);
+
     std::shared_ptr<myu_tcp_packet> packet_ptr = std::make_shared<myu_tcp_packet>(packet);
     timer_manager_.start_timer(send_window_.send_next_, get_timeout_ms(), [this, packet_ptr]() {
         _handle_retransmit(packet_ptr, 0, ntohl(packet_ptr->header.seq_num), get_timeout_ms());
@@ -319,7 +353,6 @@ bool myu::TcpSession::_handle_retransmit(std::shared_ptr<myu_tcp_packet> packet,
         //todo: we can consider the connection is broken and close it, or we can just give up this packet and move on, here we just give up this packet and move on
         return false;
     }
-    //todo: realize the immediate retransmit, we may have a redundancy ack counter
     uint64_t next_timeout_ = next_timeout_ms * (1 << retransmit_count);
     spdlog::debug("this packet has been retransmit {} times, then the timeout_ms is {}", retransmit_count,
                   next_timeout_);
