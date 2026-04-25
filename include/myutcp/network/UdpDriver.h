@@ -1,7 +1,6 @@
 #pragma once
 #include "uv.h"
 #include <functional>
-#include "segment.h"
 #include "spdlog/spdlog.h"
 
 using OnRecCallBack = std::function<void(const myu::myu_tcp_packet&, const sockaddr_in&)>;

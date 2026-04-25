@@ -1,13 +1,16 @@
 #pragma once
+#include <chrono>
+#include <functional>
+#include <map>
 #include <memory>
 #include <span>
 #include <string>
 
 #include "RingBuffer.h"
+#include "segment.h"
 #include "sw.h"
-#include "TimerManager.h"
-#include "UdpDriver.h"
-
+#include "myutcp/network/TimerManager.h"
+#include "myutcp/network/UdpDriver.h"
 
 // TCP Control Block
 namespace myu {
@@ -97,7 +100,7 @@ namespace myu {
         rtt_time time_collect_rtt_start_;
         rtt_time time_collect_rtt_end_;
 
-        myu::RingQueue<uint8_t, 1024> send_buffer_;
+        RingQueue<uint8_t, 1024> send_buffer_;
         myu::RingQueue<uint8_t, 1024> recv_buffer_;
         std::map<uint32_t, std::vector<uint8_t> > ooo_map_; // out-of-order packet map, key is the seq number
         std::map<uint32_t, myu_tcp_packet> inflight_packets_;

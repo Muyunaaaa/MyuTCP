@@ -1,6 +1,4 @@
-#include "stack.h"
-#include "spdlog/spdlog.h"
-#include "spdlog/sinks/stdout_color_sinks.h"
+#include "myutcp/myutcp.h"
 
 int main() {
     auto *client = new myu::TcpStack("127.0.0.1", 9999);

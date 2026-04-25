@@ -16,13 +16,10 @@ add_library(myutcp STATIC
         src/core/tcb.cpp
         src/network/TimerManager.cpp
         src/network/UdpDriver.cpp
-        include/util/logger.h
 )
 
 target_include_directories(myutcp PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/core>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/network>
 )
 
 target_link_libraries(myutcp PUBLIC
@@ -38,16 +35,6 @@ else()
 endif()
 
 add_executable(tcp_realization
-        include/core/segment.h
-        include/core/tcb.h
-        include/core/sw.h
-        include/network/UdpDriver.h
-        include/network/TimerManager.h
-        include/core/RingBuffer.h
-        src/core/tcb.cpp
-        include/core/stack.h
-        include/util/gen_iss.h
-        include/util/parse_ip.h
         test/server_instance.cpp
 )
 
