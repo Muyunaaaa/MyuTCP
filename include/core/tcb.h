@@ -187,9 +187,9 @@ namespace myu {
         }
 
         // other
-        void _calculate_checksum(myu::myu_tcp_packet &packet);
+        static void _calculate_checksum(myu::myu_tcp_packet &packet);
 
-        bool _verify_checksum(const myu::myu_tcp_packet &packet);
+        static bool _verify_checksum(const myu::myu_tcp_packet &packet);
 
         // the function which notifies the stack that the session is ready to be processed.
         NotifyStackCb notify_stack_cb_;

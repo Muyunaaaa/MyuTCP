@@ -31,6 +31,7 @@ myu::TcpSession::TcpSession(uv_loop_t *loop, UdpDriver *udp_driver):
     ooo_map_ = std::map<uint32_t, std::vector<uint8_t> >();
     inflight_packets_ = std::map<uint32_t, myu_tcp_packet >();
     peer_usable_window_size_ = 0;
+    last_ack_received_ = send_window_.initial_send_seq_;
 }
 
 void myu::TcpSession::set_on_established(std::function<void()> callback) {
@@ -163,13 +164,11 @@ bool myu::TcpSession::_handle_ack(const myu::myu_tcp_packet &packet) {
 
         // if we receive 3 duplicate ACKs, it means that the packet with seq number ack_num is lost,
         // we need to retransmit it immediately without waiting for the timer to timeout
+        // todo: we need to adjust the window size
         if (dup_ack_count_ == 3) {
             on_recv_three_dup_ack(ack_num);
             dup_ack_count_ = 0;
         }
-
-        // todo: we need to adjust the strategy for updating the window size, here we just set it as the size of the peer window can accept
-        send_window_.send_window_size_ = peer_window;
 
         _handle_try_send();
 
@@ -350,7 +349,7 @@ bool myu::TcpSession::_handle_retransmit(std::shared_ptr<myu_tcp_packet> packet,
     timer_manager_.stop_timer(retr_seq_num);
     if (retransmit_count >= MAX_RETRANSMIT_COUNT) {
         spdlog::error("Packet with seq {} has been retransmitted {} times, giving up", retr_seq_num, retransmit_count);
-        //todo: we can consider the connection is broken and close it, or we can just give up this packet and move on, here we just give up this packet and move on
+        // we can consider the connection is broken and close it, or we can just give up this packet and move on, here we just give up this packet and move on
         return false;
     }
     uint64_t next_timeout_ = next_timeout_ms * (1 << retransmit_count);
@@ -564,8 +563,6 @@ void myu::TcpSession::input(const myu::myu_tcp_packet &packet) {
     }
     // update the peer usable window size according to the window size field in the header of the packet, which is the size of bytes the peer can accept
     _set_peer_usable_window_size(ntohs(packet.header.window_size));
-    uint16_t raw_win = packet.header.window_size;
-    uint16_t host_win = ntohs(raw_win);
     // according to now state, call the corresponding handler function to handle the packet
     switch (state_) {
         case TcpState::CLOSED:
@@ -619,6 +616,8 @@ void myu::TcpSession::connect() {
     send_window_.send_next_ = iss;
     send_window_.send_unack_ = iss;
 
+    // todo: we need a timer to record the rtt.
+
     spdlog::info("Send a SYN packet to {}:{}", get_remote_ip(), get_remote_port());
     _send_control_packet(FLAG_SYN);
 
@@ -627,7 +626,7 @@ void myu::TcpSession::connect() {
 
 void myu::TcpSession::close() {
     if (get_state() == ESTABLISHED) {
-        // todo: to be sure that the buffer is empty
+        // todo: to be sure that the send buffer is empty
         _transition_to(TcpState::FIN_WAIT_1);
         spdlog::info("Send a FIN packet to {}:{}", get_remote_ip(), get_remote_port());
         _send_control_packet(FLAG_FIN);
@@ -744,6 +743,8 @@ void myu::TcpSession::handle_listen(const myu::myu_tcp_packet &packet) {
 
     recv_window_.recv_next_ = client_isn + 1;
 
+    // todo: we need a timer to record the rtt.
+
     // bind the remote addr
     set_remote_addr(get_remote_ip().c_str(), get_remote_port());
     _transition_to(TcpState::SYN_RECEIVED);
@@ -840,7 +841,7 @@ void myu::TcpSession::handle_established(const myu::myu_tcp_packet &packet) {
 
 void myu::TcpSession::_start_2msl_timer() {
     // const uint64_t TWO_MSL_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes in milliseconds
-    const uint64_t TWO_MSL_TIMEOUT_MS = 2 * 1000; // TODO: set it to 2 minutes in the future
+    constexpr uint64_t TWO_MSL_TIMEOUT_MS = 2 * 1000; // TODO: set it to 2 minutes in the future
     if (!timer_manager_._2msl_timer) {
         timer_manager_._2msl_timer = std::make_unique<uv_timer_t>();
         uv_timer_init(timer_manager_.loop_, timer_manager_._2msl_timer.get());
