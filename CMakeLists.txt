@@ -35,7 +35,8 @@ else()
 endif()
 
 add_executable(tcp_realization
-        test/server_instance.cpp
+#        test/server_instance.cpp
+        test/client_instance.cpp
 )
 
 target_link_libraries(tcp_realization PRIVATE myutcp)

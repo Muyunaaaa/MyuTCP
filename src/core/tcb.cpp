@@ -384,9 +384,9 @@ bool myu::TcpSession::_handle_retransmit(std::shared_ptr<myu_tcp_packet> packet,
     uint32_t cwnd = send_window_.send_window_size_;
     uint32_t _ssthresh = ssthresh_;
     if (cwnd % 2) {
-        ssthresh_ = cwnd / 2;
-    }else {
         ssthresh_ = (cwnd + 1) / 2;
+    }else {
+        ssthresh_ = cwnd + 1;
     }
     send_window_.send_window_size_ = 1;
     MYU_LOG_INFO("Packet Lost! We reset the cwnd from {} to {}, ssthresh from {} to {}" ,
